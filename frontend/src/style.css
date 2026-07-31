@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-ink-950 text-slate-200 font-sans antialiased;
+    background-image:
+      radial-gradient(60rem 60rem at 12% -10%, rgba(56, 189, 248, 0.12), transparent 55%),
+      radial-gradient(50rem 50rem at 100% 0%, rgba(34, 211, 238, 0.08), transparent 55%);
+    background-attachment: fixed;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-ink-600 rounded-full;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+}
+
+@layer components {
+  /* Glassmorphism surface used across the whole UI. */
+  .glass {
+    @apply bg-ink-800/60 backdrop-blur-xl border border-white/10 rounded-2xl shadow-glass;
+  }
+  .glass-hover {
+    @apply transition duration-200 hover:border-brand/40 hover:shadow-glow;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm
+      transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed select-none;
+  }
+  .btn-primary {
+    @apply btn bg-brand text-ink-950 hover:bg-brand-soft shadow-glow;
+  }
+  .btn-ghost {
+    @apply btn bg-white/5 text-slate-200 hover:bg-white/10 border border-white/10;
+  }
+  .btn-danger {
+    @apply btn bg-loss/90 text-ink-950 hover:bg-loss;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold;
+  }
+
+  .input {
+    @apply w-full bg-ink-900/70 border border-white/10 rounded-xl px-3 py-2 text-sm
+      text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand/60
+      focus:ring-2 focus:ring-brand/20;
+  }
+
+  .stat-label {
+    @apply text-[11px] uppercase tracking-wider text-slate-400 font-semibold;
+  }
+}

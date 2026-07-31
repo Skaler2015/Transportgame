@@ -1,0 +1,65 @@
+<?php
+
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CompanyController;
+use App\Http\Controllers\Api\ContractController;
+use App\Http\Controllers\Api\DevController;
+use App\Http\Controllers\Api\DriverController;
+use App\Http\Controllers\Api\FleetController;
+use App\Http\Controllers\Api\MarketController;
+use App\Http\Controllers\Api\ResearchController;
+use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\Api\WorldController;
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| Transoria Online — REST API
+|--------------------------------------------------------------------------
+| Token auth via Laravel Sanctum. All money fields are integer CENTS of the
+| in-game Credit (₡). Protected routes require a Bearer token.
+*/
+
+Route::get('/health', fn () => response()->json(['status' => 'ok', 'game' => 'Transoria Online']));
+
+// --- Public auth ---------------------------------------------------------
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
+
+// Public world reference data (read-only).
+Route::get('/world/cities', [WorldController::class, 'cities']);
+Route::get('/world/commodities', [WorldController::class, 'commodities']);
+Route::get('/world/events', [WorldController::class, 'events']);
+Route::get('/world/leaderboard', [WorldController::class, 'leaderboard']);
+Route::get('/market', [MarketController::class, 'index']);
+Route::get('/market/history', [MarketController::class, 'history']);
+
+// Non-production helper to advance the simulation on demand.
+Route::post('/dev/tick', [DevController::class, 'tick']);
+
+// --- Authenticated -------------------------------------------------------
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/me', [AuthController::class, 'me']);
+    Route::post('/logout', [AuthController::class, 'logout']);
+
+    Route::get('/company', [CompanyController::class, 'show']);
+    Route::get('/dashboard', [CompanyController::class, 'dashboard']);
+    Route::get('/ledger', [CompanyController::class, 'ledger']);
+
+    Route::get('/contracts', [ContractController::class, 'index']);
+    Route::get('/contracts/mine', [ContractController::class, 'mine']);
+    Route::post('/contracts/{contract}/accept', [ContractController::class, 'accept']);
+
+    Route::get('/fleet', [FleetController::class, 'index']);
+    Route::get('/dealership', [FleetController::class, 'dealership']);
+    Route::post('/dealership/{model}/buy', [FleetController::class, 'buy']);
+
+    Route::get('/drivers', [DriverController::class, 'index']);
+    Route::post('/drivers/hire', [DriverController::class, 'hire']);
+
+    Route::get('/shipments', [ShipmentController::class, 'index']);
+    Route::post('/shipments/dispatch', [ShipmentController::class, 'dispatch']);
+
+    Route::get('/research', [ResearchController::class, 'index']);
+    Route::post('/research/{node}/unlock', [ResearchController::class, 'unlock']);
+});
