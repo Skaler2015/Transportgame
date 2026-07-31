@@ -181,7 +181,7 @@ caches on the server. The whole game deploys as **one Laravel app** that serves
 both `/api` and the compiled SPA (single docroot → `.../public`).
 
 Set the five repository secrets (`SSH_HOST`, `SSH_PORT`, `SSH_USER`,
-`SSH_PRIVATE_KEY`, `DEPLOY_PATH`) and follow the one-time Hostinger setup in
+`SSH_PASSWORD`, `DEPLOY_PATH`) and follow the one-time Hostinger setup in
 **[`docs/DEPLOY_HOSTINGER.md`](docs/DEPLOY_HOSTINGER.md)**. To build the deployable
 artifact locally: `bash scripts/build.sh`.
 

@@ -20,36 +20,32 @@ hPanel → **Databases → MySQL Databases** → naya database + user banao (don
 `uXXXXXXXX_...` jaisa hoga). Database name, user, password note kar lo.
 
 ### 2) SSH access on karo
-hPanel → **Advanced → SSH Access** → *Enable*. Wahan milega:
-- **SSH IP / Host** (jaise `srv1558.hstgr.io` ya ek IP)
-- **Port** (Hostinger par aksar `65002`)
-- **Username** (jaise `u246829578`)
+hPanel → **Advanced → SSH Access** → *Enable* (agar pehle se ACTIVE hai to theek).
+Wahan milega: **IP/Host**, **Port** (`65002`), **Username** (`uXXXXXXXX`), aur
+**Password** (zaroorat ho to "Change" se naya set kar lo — yahi GitHub secret
+`SSH_PASSWORD` me jaayega).
 
-Deploy ke liye ek SSH key banao (apne PC par, ya kahin bhi):
-```bash
-ssh-keygen -t ed25519 -f hostinger_deploy -N ""      # 2 files banengi
-```
-- `hostinger_deploy.pub` (public key) ka content hPanel → **SSH Access → Manage SSH keys → Import**  me daal do (authorize kar do).
-- `hostinger_deploy` (private key) ka **poora content** GitHub secret `SSH_PRIVATE_KEY` me jaayega (agla step).
+> Hum yahan **password-based** deploy use kar rahe hain (sabse aasaan — koi key
+> banane ki zaroorat nahi). Baad me chaaho to SSH key par upgrade kar sakte ho.
 
-### 3) App folder + subdomain docroot
-- App ko is folder me deploy karenge (chuno ek, DEPLOY_PATH me yahi dalna hai):
-  `~/domains/playb.in/cargo_app`  (ya `~/public_html/cargo_app`)
-- hPanel → **Websites → cargo.playb.in → (Manage) → Website settings / Subdomains**
-  me **Document Root** ko `.../cargo_app/public` par set karo (Laravel ka `public`).
-  > Yeh zaroori hai — docroot Laravel ke `public` folder par hona chahiye, warna
-  > `.env` public ho sakta hai.
+### 3) Subdomain docroot ko Laravel ke `public` par le jao
+App `public_html/cargo/` me deploy hoga (DEPLOY_PATH). Laravel ka front-controller
+uske andar `public/` me hota hai, isliye:
+- hPanel → **Websites → cargo.playb.in → Website settings** (ya **Subdomains**) me
+  **Document Root** ko `public_html/cargo` se badal kar **`public_html/cargo/public`**
+  kar do.
+  > Zaroori: docroot `.../cargo/public` par ho — tabhi `.env` web se hidden rahega.
 
 ### 4) Server par `.env` banao (ek baar)
-SSH se login karke:
+Pehle ek deploy chala do (GitHub secrets set karke, ya Actions → Run workflow) taaki
+files server par aa jayein. Phir SSH se:
 ```bash
-ssh -p 65002 uXXXXXXXX@YOUR_SSH_HOST
-mkdir -p ~/domains/playb.in/cargo_app && cd ~/domains/playb.in/cargo_app
-# pehle GitHub Actions ek deploy chala dega (neeche), uske baad:
+ssh -p 65002 uXXXXXXXX@82.180.164.152     # apna IP/user
+cd ~/public_html/cargo
 cp .env.production.example .env
-nano .env            # DB name/user/password aur APP_URL bhar do
+nano .env            # DB name/user/password aur APP_URL=https://cargo.playb.in bharo
 php artisan key:generate
-php artisan migrate --seed --force      # world seed ho jayega (cities, cargo, vehicles)
+php artisan migrate --seed --force      # world seed (cities, cargo, vehicles)
 php artisan world:tick                  # pehla contract/price batch
 chmod -R 775 storage bootstrap/cache
 ```
@@ -57,7 +53,7 @@ chmod -R 775 storage bootstrap/cache
 ### 5) World ko chalta rakho (cron)
 hPanel → **Advanced → Cron Jobs** → naya cron, har minute:
 ```
-cd ~/domains/playb.in/cargo_app && php artisan schedule:run >/dev/null 2>&1
+cd ~/public_html/cargo && php artisan schedule:run >/dev/null 2>&1
 ```
 Yeh `world:tick` ko har minute chalata hai (economy, events, deliveries aage badhti hain).
 
@@ -67,11 +63,11 @@ Yeh 5 secrets banao (values **yahan chat me mat bhejo**, seedha GitHub me daalo)
 
 | Secret name | Value |
 |---|---|
-| `SSH_HOST` | Hostinger SSH host/IP (step 2) |
-| `SSH_PORT` | `65002` (jo step 2 me dikhe) |
+| `SSH_HOST` | Hostinger SSH IP (step 2) |
+| `SSH_PORT` | `65002` |
 | `SSH_USER` | `uXXXXXXXX` |
-| `SSH_PRIVATE_KEY` | `hostinger_deploy` private key ka poora content |
-| `DEPLOY_PATH` | `/home/uXXXXXXXX/domains/playb.in/cargo_app` (poora path) |
+| `SSH_PASSWORD` | aapka SSH password (step 2) |
+| `DEPLOY_PATH` | `/home/uXXXXXXXX/public_html/cargo` (poora path) |
 
 ---
 
