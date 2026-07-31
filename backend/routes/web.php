@@ -1,7 +1,50 @@
 <?php
 
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| One-time web installer
+|--------------------------------------------------------------------------
+| For hosts where CLI/SSH is inconvenient, this token-guarded endpoint runs
+| the first-time setup from the browser: generate APP_KEY (if missing),
+| migrate + seed the world, link storage and prime the market. Protected by
+| the SETUP_TOKEN env var; returns 403 without the correct token. Safe to
+| re-run (migrations are idempotent). Remove SETUP_TOKEN from .env when done.
+*/
+Route::get('/__setup', function () {
+    $token = env('SETUP_TOKEN');
+    abort_unless($token && hash_equals($token, (string) request('token')), 403, 'Forbidden');
+
+    $log = [];
+
+    if (! env('APP_KEY')) {
+        Artisan::call('key:generate', ['--force' => true]);
+        $log[] = 'APP_KEY generated.';
+    }
+
+    Artisan::call('migrate', ['--force' => true, '--seed' => true]);
+    $log[] = Artisan::output();
+
+    try {
+        Artisan::call('storage:link');
+        $log[] = Artisan::output();
+    } catch (\Throwable $e) {
+        $log[] = 'storage:link skipped: '.$e->getMessage();
+    }
+
+    Artisan::call('world:tick', ['--quiet-summary' => true]);
+    $log[] = 'World primed.';
+
+    return response(
+        '<h1>Transoria setup complete ✅</h1><p>Open <a href="/">the game</a>. '
+        .'Now remove SETUP_TOKEN from your .env.</p><pre style="white-space:pre-wrap">'
+        .e(implode("\n", $log)).'</pre>',
+        200
+    )->header('Content-Type', 'text/html');
+});
 
 /*
 |--------------------------------------------------------------------------
