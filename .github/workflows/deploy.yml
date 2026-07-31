@@ -1,0 +1,94 @@
+name: Deploy to Hostinger (cargo.playb.in)
+
+# Auto-publish on every push to the branches below. GitHub builds the app
+# (Composer + Vite), then rsyncs it to Hostinger over SSH and runs the
+# database migrations + cache warmup remotely. Configure the repository
+# Secrets listed under `env:` before the first run (see docs/DEPLOY_HOSTINGER.md).
+
+on:
+  push:
+    branches:
+      - main
+      - claude/transoria-online-design-yltaxe
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --- Build the Vue SPA -------------------------------------------------
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Stage SPA into Laravel public/
+        run: |
+          rm -rf backend/public/assets backend/public/index.html
+          cp -r frontend/dist/. backend/public/
+
+      # --- Build the Laravel app --------------------------------------------
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo, pdo_mysql, bcmath, ctype, curl, dom, fileinfo, xml
+          tools: composer:v2
+
+      - name: Install backend dependencies (production)
+        working-directory: backend
+        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
+      # --- Deploy over SSH ---------------------------------------------------
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Rsync app to Hostinger
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          # .env, runtime storage, VCS and the local dev DB are never overwritten
+          # or deleted on the server (they live outside version control there).
+          rsync -az --delete-after \
+            --exclude='.env' \
+            --exclude='.git/' \
+            --exclude='storage/' \
+            --exclude='database/database.sqlite' \
+            --exclude='node_modules/' \
+            -e "ssh -p ${SSH_PORT} -o StrictHostKeyChecking=no" \
+            ./backend/ "${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/"
+
+      - name: Run migrations & warm caches on server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh -p "${SSH_PORT}" -o StrictHostKeyChecking=no "${SSH_USER}@${SSH_HOST}" \
+            "cd '${DEPLOY_PATH}' && \
+             php artisan migrate --force && \
+             php artisan config:cache && \
+             php artisan route:cache && \
+             (php artisan storage:link || true) && \
+             echo 'Deploy complete'"

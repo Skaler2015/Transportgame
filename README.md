@@ -172,6 +172,19 @@ Token auth via Laravel Sanctum (`Authorization: Bearer <token>`).
 
 See [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md) for the full design document.
 
+## 🚢 Deployment (auto-publish on push)
+
+The repo ships a **GitHub Actions pipeline** ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml))
+that auto-publishes to **cargo.playb.in (Hostinger)** on every push: it builds the
+SPA + Composer deps, rsyncs the app over SSH, then runs migrations and warms
+caches on the server. The whole game deploys as **one Laravel app** that serves
+both `/api` and the compiled SPA (single docroot → `.../public`).
+
+Set the five repository secrets (`SSH_HOST`, `SSH_PORT`, `SSH_USER`,
+`SSH_PRIVATE_KEY`, `DEPLOY_PATH`) and follow the one-time Hostinger setup in
+**[`docs/DEPLOY_HOSTINGER.md`](docs/DEPLOY_HOSTINGER.md)**. To build the deployable
+artifact locally: `bash scripts/build.sh`.
+
 ## 🧾 Tech notes
 
 - Laravel is on the current stable release (13.x on PHP 8.4). The brief targeted
