@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, onUnmounted, computed, ref, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
@@ -11,6 +11,11 @@ const auth = useAuthStore()
 const game = useGameStore()
 const toast = useToastStore()
 const router = useRouter()
+const route = useRoute()
+
+// Mobile navigation drawer (the sidebar is hidden below the lg breakpoint).
+const mobileOpen = ref(false)
+watch(() => route.fullPath, () => (mobileOpen.value = false))
 
 const nav = [
   { to: '/dashboard', label: 'Dashboard', icon: '◧' },
@@ -93,6 +98,13 @@ async function logout() {
       <!-- Topbar -->
       <header class="sticky top-0 z-30 border-b border-white/10 bg-ink-950/70 backdrop-blur-xl">
         <div class="px-4 sm:px-6 h-16 flex items-center gap-4">
+          <!-- Mobile menu button (hidden on lg where the sidebar shows) -->
+          <button
+            class="lg:hidden btn-ghost !px-3 !py-2 text-lg leading-none"
+            aria-label="Menu"
+            @click="mobileOpen = true"
+          >☰</button>
+
           <div class="flex items-center gap-3 min-w-0">
             <div
               class="h-8 w-8 rounded-lg shrink-0 flex items-center justify-center font-bold text-ink-950 text-sm"
@@ -142,5 +154,53 @@ async function logout() {
         <RouterView />
       </main>
     </div>
+
+    <!-- Mobile navigation drawer -->
+    <Transition name="fade">
+      <div v-if="mobileOpen" class="fixed inset-0 z-50 lg:hidden" @click="mobileOpen = false">
+        <div class="absolute inset-0 bg-ink-950/70 backdrop-blur-sm" />
+        <aside
+          class="absolute left-0 top-0 bottom-0 w-72 max-w-[80%] bg-ink-900 border-r border-white/10 flex flex-col animate-slide-up"
+          @click.stop
+        >
+          <div class="px-5 py-5 flex items-center gap-3 border-b border-white/10">
+            <div class="h-9 w-9 rounded-xl bg-gradient-to-br from-brand to-brand-glow shadow-glow flex items-center justify-center font-black text-ink-950">T</div>
+            <div class="flex-1">
+              <p class="font-extrabold tracking-tight leading-none">Transoria</p>
+              <p class="text-[10px] uppercase tracking-[0.2em] text-brand-soft">Online</p>
+            </div>
+            <button class="btn-ghost !px-3" aria-label="Close" @click="mobileOpen = false">✕</button>
+          </div>
+
+          <nav class="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
+            <RouterLink
+              v-for="item in nav"
+              :key="item.to"
+              :to="item.to"
+              class="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-slate-300 hover:text-slate-100 hover:bg-white/5 transition"
+              active-class="!text-brand bg-brand/10 !font-semibold"
+            >
+              <span class="text-base w-5 text-center opacity-80">{{ item.icon }}</span>
+              {{ item.label }}
+            </RouterLink>
+          </nav>
+
+          <div class="p-4 border-t border-white/10">
+            <button class="btn-ghost w-full text-xs" @click="advance">⏱ Advance World</button>
+          </div>
+        </aside>
+      </div>
+    </Transition>
   </div>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>
