@@ -54,44 +54,28 @@ jobs:
         working-directory: backend
         run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
-      # --- Deploy over SSH (password auth via sshpass) -----------------------
-      # Uses the SSH_PASSWORD secret so no key management is needed. To upgrade
-      # to key-based auth later, add an SSH key on Hostinger and swap sshpass
-      # for webfactory/ssh-agent.
-      - name: Install sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass
-
-      - name: Rsync app to Hostinger
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSHPASS: ${{ secrets.SSH_PASSWORD }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        run: |
-          # .env, runtime storage, VCS and the local dev DB are never overwritten
-          # or deleted on the server (they live outside version control there).
-          rsync -az --delete-after \
-            --exclude='.env' \
-            --exclude='.git/' \
-            --exclude='storage/' \
-            --exclude='database/database.sqlite' \
-            --exclude='node_modules/' \
-            -e "sshpass -e ssh -p ${SSH_PORT} -o StrictHostKeyChecking=no" \
-            ./backend/ "${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/"
-
-      - name: Run migrations & warm caches on server
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSHPASS: ${{ secrets.SSH_PASSWORD }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        run: |
-          sshpass -e ssh -p "${SSH_PORT}" -o StrictHostKeyChecking=no "${SSH_USER}@${SSH_HOST}" \
-            "cd '${DEPLOY_PATH}' && \
-             php artisan migrate --force && \
-             php artisan config:cache && \
-             php artisan route:cache && \
-             (php artisan storage:link || true) && \
-             echo 'Deploy complete'"
+      # --- Deploy over FTP ---------------------------------------------------
+      # Hostinger's firewall blocks SSH from cloud/CI IPs, so we transfer over
+      # FTP (which it allows). The action keeps a sync-state file on the server
+      # and only uploads changed files, so after the first (slow) upload each
+      # deploy is fast. Database migrations are run once by you from your own
+      # machine's SSH — see docs/DEPLOY_HOSTINGER.md.
+      - name: Deploy to Hostinger via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftp
+          port: 21
+          local-dir: ./backend/
+          server-dir: ${{ secrets.FTP_SERVER_DIR }}
+          # Never upload secrets, VCS, the local dev DB, node modules or tests.
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            .env
+            .env.*
+            database/database.sqlite
+            tests/**
