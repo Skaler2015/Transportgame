@@ -90,6 +90,28 @@ class ExpansionTest extends TestCase
         $this->assertNull($this->getJson('/api/guilds')->json('mine'));
     }
 
+    public function test_accounts_summary_reports_pnl_and_balance_sheet(): void
+    {
+        // Take a loan so there is both a liability and financing activity.
+        $this->postJson('/api/finance/borrow', ['amount' => 100000_00])->assertCreated();
+
+        $res = $this->getJson('/api/accounts?period=all')->assertOk()->json();
+
+        $this->assertArrayHasKey('pnl', $res);
+        $this->assertArrayHasKey('balance_sheet', $res);
+        $this->assertSame(100000_00, $res['balance_sheet']['liabilities']['loans']);
+        // Assets include cash + fleet value (the starter truck).
+        $this->assertGreaterThan(0, $res['balance_sheet']['assets']['fleet_value']);
+        $this->assertSame(
+            $res['balance_sheet']['assets']['total'] - $res['balance_sheet']['liabilities']['total'],
+            $res['balance_sheet']['equity'],
+        );
+
+        $this->getJson('/api/accounts/ledger')
+            ->assertOk()
+            ->assertJsonStructure(['data' => [['category', 'amount', 'balance_after']]]);
+    }
+
     public function test_vehicle_upgrade_increases_level(): void
     {
         $vehicle = Vehicle::where('company_id', $this->user->company->id)->first();

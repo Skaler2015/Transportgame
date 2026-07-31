@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AccountsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\ContractController;
@@ -51,6 +52,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/company', [CompanyController::class, 'show']);
     Route::get('/dashboard', [CompanyController::class, 'dashboard']);
     Route::get('/ledger', [CompanyController::class, 'ledger']);
+
+    // Automated accounting: P&L, balance sheet, transaction journal.
+    Route::get('/accounts', [AccountsController::class, 'summary']);
+    Route::get('/accounts/ledger', [AccountsController::class, 'ledger']);
 
     Route::get('/contracts', [ContractController::class, 'index']);
     Route::get('/contracts/mine', [ContractController::class, 'mine']);
