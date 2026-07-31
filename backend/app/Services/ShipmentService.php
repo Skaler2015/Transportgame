@@ -28,6 +28,7 @@ class ShipmentService
     public function __construct(
         private readonly LedgerService $ledger,
         private readonly ResearchService $research,
+        private readonly MissionService $missions,
     ) {}
 
     /**
@@ -63,10 +64,11 @@ class ShipmentService
             $totalWeight = $commodity->weight_per_unit * $contract->units;
             $totalVolume = $commodity->volume_per_unit * $contract->units;
 
-            if ($totalWeight > $model->capacity_weight + 0.001) {
+            // Capacity includes any trailer upgrades on this specific vehicle.
+            if ($totalWeight > $vehicle->effectiveCapacityWeight() + 0.001) {
                 throw new RuntimeException('Cargo exceeds the vehicle weight capacity.');
             }
-            if ($totalVolume > $model->capacity_volume + 0.001) {
+            if ($totalVolume > $vehicle->effectiveCapacityVolume() + 0.001) {
                 throw new RuntimeException('Cargo exceeds the vehicle volume capacity.');
             }
 
@@ -79,13 +81,17 @@ class ShipmentService
             $weather = $contract->destination->weather ?? 'clear';
             $weatherFactor = self::WEATHER_FACTOR[$weather] ?? 1.0;
             $trafficFactor = 1 - ($contract->destination->traffic / 100) * 0.4;
-            $speedFactor = $driver->speedFactor() * (1 + ($bonuses['speed_factor'] ?? 0));
+            // Engine upgrades: +4% speed and -5% fuel burn per level.
+            $engineSpeed = 1 + 0.04 * $vehicle->engine_level;
+            $engineFuel = 1 - 0.05 * $vehicle->engine_level;
+
+            $speedFactor = $driver->speedFactor() * (1 + ($bonuses['speed_factor'] ?? 0)) * $engineSpeed;
 
             $speed = max(30, $model->top_speed * $speedFactor * $weatherFactor * $trafficFactor);
             $travelHours = $distance / $speed;
 
             // Fuel budget & upfront fuel cost (electric/hydrogen sip a little).
-            $economy = $model->fuel_economy * (1 + ($bonuses['fuel_economy'] ?? 0));
+            $economy = $model->fuel_economy * (1 + ($bonuses['fuel_economy'] ?? 0)) * $engineFuel;
             $fuelBudget = max(0, $distance * $economy);
             $fuelCost = (int) round($fuelBudget * $contract->origin->fuel_price * 100);
 
@@ -224,6 +230,14 @@ class ShipmentService
 
                 // Goods physically move: drain origin stock, feed destination stock.
                 $this->moveStock($contract->origin_city_id, $contract->destination_city_id, $commodity->id, $contract->units);
+
+                // Mission progress (revenue tracked in ₡, not cents).
+                $this->missions->progress($company, 'deliveries', 1);
+                if (! $late) {
+                    $this->missions->progress($company, 'on_time', 1);
+                }
+                $this->missions->progress($company, 'revenue', (int) round($net / 100));
+                $this->missions->progress($company, 'distance', (int) round($shipment->distance_km));
             }
 
             if ($repairCost > 0) {
@@ -235,7 +249,9 @@ class ShipmentService
             $km = $shipment->distance_km;
             $vehicle->odometer += (int) round($km);
             $vehicle->condition = max(0, $vehicle->condition - $km / 1000 * $cfg['condition_loss_per_1000km'] - ($failed ? 8 : 0));
-            $vehicle->tire_wear = min(100, $vehicle->tire_wear + $km / 1000 * $cfg['tire_loss_per_1000km']);
+            // Tyre upgrades cut wear by 15% per level.
+            $tireResist = max(0.4, 1 - 0.15 * $vehicle->tires_level);
+            $vehicle->tire_wear = min(100, $vehicle->tire_wear + $km / 1000 * $cfg['tire_loss_per_1000km'] * $tireResist);
             $vehicle->fuel = max(0, $vehicle->fuel - $shipment->fuel_budget);
             $vehicle->status = $vehicle->condition < 15 ? Vehicle::STATUS_MAINTENANCE : Vehicle::STATUS_IDLE;
             $vehicle->city_id = $contract->destination_city_id;

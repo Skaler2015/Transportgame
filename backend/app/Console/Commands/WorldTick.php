@@ -2,9 +2,13 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Company;
 use App\Models\Shipment;
+use App\Models\TradeListing;
 use App\Services\EconomyService;
 use App\Services\EventService;
+use App\Services\FinanceService;
+use App\Services\MissionService;
 use App\Services\ShipmentService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -20,8 +24,13 @@ class WorldTick extends Command
 
     protected $description = 'Advance the Transoria economy, events and shipments by one tick';
 
-    public function handle(EconomyService $economy, EventService $events, ShipmentService $shipments): int
-    {
+    public function handle(
+        EconomyService $economy,
+        EventService $events,
+        ShipmentService $shipments,
+        FinanceService $finance,
+        MissionService $missions,
+    ): int {
         $start = microtime(true);
 
         // 1. World events + weather/fuel drift.
@@ -44,17 +53,23 @@ class WorldTick extends Command
                 }
             });
 
-        // 4. Drivers recover between trips.
-        DB::table('companies')->orderBy('id')->pluck('id')->each(function ($id) use ($shipments) {
-            $company = \App\Models\Company::find($id);
-            if ($company) {
-                $shipments->restDrivers($company);
+        // 4. Per-company upkeep: rest drivers, accrue loan interest, top up missions.
+        DB::table('companies')->orderBy('id')->pluck('id')->each(function ($id) use ($shipments, $finance, $missions) {
+            $company = Company::find($id);
+            if (! $company) {
+                return;
             }
+            $shipments->restDrivers($company);
+            $finance->accrueInterest($company);
+            $missions->ensure($company);
         });
 
-        // 5. Contract market housekeeping.
+        // 5. Contract market housekeeping + expire stale exchange listings.
         $expired = $economy->expireStaleContracts();
         $minted = $economy->replenishContracts($activeEvents);
+        TradeListing::where('status', TradeListing::STATUS_OPEN)
+            ->where('expires_at', '<=', now())
+            ->update(['status' => TradeListing::STATUS_CANCELLED]);
 
         $ms = round((microtime(true) - $start) * 1000);
 

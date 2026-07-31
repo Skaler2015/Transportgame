@@ -5,10 +5,16 @@ use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\DevController;
 use App\Http\Controllers\Api\DriverController;
+use App\Http\Controllers\Api\ExchangeController;
+use App\Http\Controllers\Api\FinanceController;
 use App\Http\Controllers\Api\FleetController;
+use App\Http\Controllers\Api\GarageController;
+use App\Http\Controllers\Api\GuildController;
 use App\Http\Controllers\Api\MarketController;
+use App\Http\Controllers\Api\MissionController;
 use App\Http\Controllers\Api\ResearchController;
 use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\WorldController;
 use Illuminate\Support\Facades\Route;
 
@@ -62,4 +68,36 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/research', [ResearchController::class, 'index']);
     Route::post('/research/{node}/unlock', [ResearchController::class, 'unlock']);
+
+    // Warehouses & direct trading.
+    Route::get('/warehouses', [WarehouseController::class, 'index']);
+    Route::post('/warehouses', [WarehouseController::class, 'build']);
+    Route::post('/warehouses/{warehouse}/buy', [WarehouseController::class, 'buy']);
+    Route::post('/warehouses/{warehouse}/sell', [WarehouseController::class, 'sell']);
+
+    // Missions.
+    Route::get('/missions', [MissionController::class, 'index']);
+    Route::post('/missions/{mission}/claim', [MissionController::class, 'claim']);
+
+    // Garage: repairs & upgrades.
+    Route::post('/vehicles/{vehicle}/repair', [GarageController::class, 'repair']);
+    Route::post('/vehicles/{vehicle}/upgrade', [GarageController::class, 'upgrade']);
+
+    // Finance: loans.
+    Route::get('/finance', [FinanceController::class, 'index']);
+    Route::post('/finance/borrow', [FinanceController::class, 'borrow']);
+    Route::post('/finance/loans/{loan}/repay', [FinanceController::class, 'repay']);
+
+    // Guilds.
+    Route::get('/guilds', [GuildController::class, 'index']);
+    Route::post('/guilds', [GuildController::class, 'create']);
+    Route::post('/guilds/{guild}/join', [GuildController::class, 'join']);
+    Route::post('/guilds/leave', [GuildController::class, 'leave']);
+    Route::post('/guilds/contribute', [GuildController::class, 'contribute']);
+
+    // Player exchange.
+    Route::get('/exchange', [ExchangeController::class, 'index']);
+    Route::post('/exchange', [ExchangeController::class, 'create']);
+    Route::post('/exchange/{listing}/buy', [ExchangeController::class, 'buy']);
+    Route::post('/exchange/{listing}/cancel', [ExchangeController::class, 'cancel']);
 });

@@ -122,6 +122,55 @@ return [
         ],
     ],
 
+    // Warehouses & direct commodity trading.
+    'warehouse' => [
+        'build_cost' => 120_000_00,   // ₡ cents to build a warehouse
+        'base_capacity' => 5000,      // units at tier 1
+        'buy_spread' => 0.03,         // you buy 3% above local price
+        'sell_spread' => 0.03,        // you sell 3% below local price
+    ],
+
+    // Vehicle repair & upgrades.
+    'garage' => [
+        'repair_cost_per_point' => 900,     // ₡ cents per condition point restored
+        'tire_cost_per_point' => 500,       // ₡ cents per tire-wear point restored
+        'upgrade_base_cost' => 60_000_00,   // ₡ cents for level 1, scales with level
+        'max_upgrade_level' => 3,
+    ],
+
+    // Financing.
+    'finance' => [
+        'max_loan_multiple' => 3.0,   // can borrow up to 3x current cash
+        'interest_per_tick' => 0.006, // ~0.6% per tick on outstanding balance
+        'min_loan' => 50_000_00,
+    ],
+
+    // Missions: templates rolled per period. reward scales lightly with level.
+    'missions' => [
+        'daily_count' => 3,
+        'weekly_count' => 2,
+        'templates' => [
+            ['period' => 'daily', 'metric' => 'deliveries', 'title' => 'Keep Rolling', 'target' => 3, 'cash' => 8_000_00, 'xp' => 60],
+            ['period' => 'daily', 'metric' => 'on_time', 'title' => 'On the Dot', 'target' => 2, 'cash' => 10_000_00, 'xp' => 70],
+            ['period' => 'daily', 'metric' => 'revenue', 'title' => 'Daily Earner', 'target' => 40_000, 'cash' => 9_000_00, 'xp' => 50],
+            ['period' => 'daily', 'metric' => 'distance', 'title' => 'Long Haul', 'target' => 1500, 'cash' => 9_000_00, 'xp' => 55],
+            ['period' => 'weekly', 'metric' => 'deliveries', 'title' => 'Freight Baron', 'target' => 20, 'cash' => 60_000_00, 'xp' => 400],
+            ['period' => 'weekly', 'metric' => 'revenue', 'title' => 'Big Money Week', 'target' => 300_000, 'cash' => 70_000_00, 'xp' => 450],
+        ],
+    ],
+
+    // Guilds.
+    'guild' => [
+        'create_cost' => 80_000_00,   // ₡ cents to found a guild
+        'max_members' => 30,
+    ],
+
+    // Player exchange.
+    'exchange' => [
+        'listing_ttl_hours' => 24,
+        'fee_pct' => 0.02,            // 2% market fee on sale, taken from seller
+    ],
+
     // World events the tick engine can roll. Weight = relative likelihood.
     'events' => [
         'fuel_crisis' => [

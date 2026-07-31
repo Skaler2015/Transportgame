@@ -15,7 +15,25 @@ class Vehicle extends Model
         'tire_wear' => 'float',
         'fuel' => 'float',
         'odometer' => 'integer',
+        'engine_level' => 'integer',
+        'tires_level' => 'integer',
+        'trailer_level' => 'integer',
     ];
+
+    /** Effective cargo weight capacity including trailer upgrades (+8%/level). */
+    public function effectiveCapacityWeight(): float
+    {
+        $base = $this->model->capacity_weight ?? 0;
+
+        return round($base * (1 + 0.08 * $this->trailer_level), 2);
+    }
+
+    public function effectiveCapacityVolume(): float
+    {
+        $base = $this->model->capacity_volume ?? 0;
+
+        return round($base * (1 + 0.08 * $this->trailer_level), 2);
+    }
 
     public const STATUS_IDLE = 'idle';
     public const STATUS_ASSIGNED = 'assigned';

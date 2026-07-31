@@ -21,7 +21,9 @@ class Company extends Model
         'shipments_failed' => 'integer',
         'lifetime_revenue' => 'integer',
         'lifetime_expenses' => 'integer',
+        'guild_contribution' => 'integer',
         'last_tick_at' => 'datetime',
+        'missions_generated_at' => 'datetime',
     ];
 
     // XP required to reach the NEXT level from the given level.
@@ -70,6 +72,26 @@ class Company extends Model
     public function research(): HasMany
     {
         return $this->hasMany(CompanyResearch::class);
+    }
+
+    public function guild(): BelongsTo
+    {
+        return $this->belongsTo(Guild::class);
+    }
+
+    public function missions(): HasMany
+    {
+        return $this->hasMany(Mission::class);
+    }
+
+    public function loans(): HasMany
+    {
+        return $this->hasMany(Loan::class);
+    }
+
+    public function tradeListings(): HasMany
+    {
+        return $this->hasMany(TradeListing::class, 'seller_company_id');
     }
 
     /** XP threshold to advance from $level to $level + 1. */

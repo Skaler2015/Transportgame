@@ -34,6 +34,26 @@ async function buy(m: VehicleModel) {
   }
 }
 
+const working = ref<number | null>(null)
+
+async function repair(v: Vehicle) {
+  working.value = v.id
+  try {
+    const { data } = await api.post(`/vehicles/${v.id}/repair`)
+    toast.success(data.message)
+    await load(); game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)) } finally { working.value = null }
+}
+
+async function upgrade(v: Vehicle, kind: 'engine' | 'tires' | 'trailer') {
+  working.value = v.id
+  try {
+    const { data } = await api.post(`/vehicles/${v.id}/upgrade`, { kind })
+    toast.success(data.message)
+    await load(); game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)) } finally { working.value = null }
+}
+
 const statusChip: Record<string, string> = {
   idle: 'bg-gain/20 text-gain', en_route: 'bg-brand/20 text-brand-soft',
   maintenance: 'bg-loss/20 text-loss', assigned: 'bg-gold/20 text-gold',
@@ -90,9 +110,28 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
         </div>
 
         <div class="grid grid-cols-3 gap-2 mt-3 text-center text-[11px]">
-          <div><p class="stat-label">Cap</p><p class="font-mono">{{ num(v.model?.capacity_weight ?? 0, 1) }}t</p></div>
+          <div><p class="stat-label">Cap</p><p class="font-mono">{{ num((v as any).effective_capacity_weight ?? v.model?.capacity_weight ?? 0, 1) }}t</p></div>
           <div><p class="stat-label">Speed</p><p class="font-mono">{{ v.model?.top_speed }}</p></div>
           <div><p class="stat-label">Class</p><p class="font-mono capitalize">{{ v.model?.class }}</p></div>
+        </div>
+
+        <!-- Service & upgrades -->
+        <div class="mt-3 pt-3 border-t border-white/5">
+          <div class="flex items-center justify-between mb-2">
+            <span class="stat-label">Upgrades ({{ (v as any).upgrade_slots_used ?? 0 }}/{{ v.model?.upgrade_slots ?? 0 }})</span>
+            <button class="btn-ghost !py-1 !px-2 text-[11px]" :disabled="working === v.id || v.status === 'en_route'" @click="repair(v)">🔧 Service</button>
+          </div>
+          <div class="grid grid-cols-3 gap-1.5">
+            <button class="btn-ghost !py-1 text-[11px] flex-col" :disabled="working === v.id" @click="upgrade(v, 'engine')">
+              ⚙ Engine <span class="text-brand-soft">L{{ (v as any).engine_level ?? 0 }}</span>
+            </button>
+            <button class="btn-ghost !py-1 text-[11px]" :disabled="working === v.id" @click="upgrade(v, 'tires')">
+              ◍ Tyres <span class="text-brand-soft">L{{ (v as any).tires_level ?? 0 }}</span>
+            </button>
+            <button class="btn-ghost !py-1 text-[11px]" :disabled="working === v.id" @click="upgrade(v, 'trailer')">
+              ▤ Trailer <span class="text-brand-soft">L{{ (v as any).trailer_level ?? 0 }}</span>
+            </button>
+          </div>
         </div>
       </div>
       <div v-if="!vehicles.length" class="glass p-8 text-center text-slate-400 col-span-full">No vehicles yet.</div>

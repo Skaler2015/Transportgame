@@ -21,7 +21,10 @@ class CompanyService
     private const FIRST_NAMES = ['Ravi', 'Mei', 'Tomas', 'Amara', 'Nikolai', 'Priya', 'Diego', 'Lena', 'Kwame', 'Yuki', 'Sofia', 'Idris', 'Hana', 'Marco', 'Zara', 'Owen'];
     private const LAST_NAMES = ['Vance', 'Okonkwo', 'Bauer', 'Reyes', 'Sato', 'Kaur', 'Novak', 'Haddad', 'Lindqvist', 'Mensah', 'Ferro', 'Costa', 'Adeyemi', 'Rowe', 'Petrov', 'Cole'];
 
-    public function __construct(private readonly LedgerService $ledger) {}
+    public function __construct(
+        private readonly LedgerService $ledger,
+        private readonly MissionService $missions,
+    ) {}
 
     /** Found a new company for a user with the starter loadout. */
     public function found(User $user, string $companyName): Company
@@ -58,6 +61,9 @@ class CompanyService
         for ($i = 0; $i < ($starter['drivers'] ?? 1); $i++) {
             $this->generateDriver($company, skillFloor: 35);
         }
+
+        // Give the new player an opening slate of missions.
+        $this->missions->ensure($company);
 
         return $company->fresh(['vehicles', 'drivers', 'headquarters']);
     }

@@ -29,6 +29,16 @@ class GameplayLoopTest extends TestCase
         $this->seed([CommoditySeeder::class, CitySeeder::class, VehicleModelSeeder::class]);
     }
 
+    /** Whether a contract's cargo physically fits (and is handleable by) a vehicle. */
+    private function fits(Contract $c, Vehicle $vehicle): bool
+    {
+        $m = $vehicle->model;
+
+        return $c->commodity->canBeCarriedBy($m)
+            && $c->commodity->weight_per_unit * $c->units <= $vehicle->effectiveCapacityWeight()
+            && $c->commodity->volume_per_unit * $c->units <= $vehicle->effectiveCapacityVolume();
+    }
+
     public function test_registration_founds_a_starter_company_with_truck_and_driver(): void
     {
         $response = $this->postJson('/api/register', [
@@ -56,25 +66,23 @@ class GameplayLoopTest extends TestCase
         $user = User::factory()->create();
         $company = app(CompanyService::class)->found($user, 'Fresh Co');
 
-        // Mint the market.
-        $this->artisan('world:tick')->assertSuccessful();
-
         $vehicle = $company->vehicles()->with('model')->first();
         $this->assertNotNull($vehicle);
 
-        $haulable = Contract::onMarket()
-            ->where('origin_city_id', $company->headquarters_city_id)
-            ->with('commodity')
-            ->get()
-            ->first(function (Contract $c) use ($vehicle) {
-                $m = $vehicle->model;
+        // The market replenishes each tick; within a few ticks there must be a
+        // haulable local contract, otherwise a new player is soft-locked.
+        $haulable = null;
+        for ($i = 0; $i < 8 && ! $haulable; $i++) {
+            $this->artisan('world:tick')->assertSuccessful();
 
-                return $c->commodity->canBeCarriedBy($m)
-                    && $c->commodity->weight_per_unit * $c->units <= $m->capacity_weight
-                    && $c->commodity->volume_per_unit * $c->units <= $m->capacity_volume;
-            });
+            $haulable = Contract::onMarket()
+                ->where('origin_city_id', $company->headquarters_city_id)
+                ->with('commodity')
+                ->get()
+                ->first(fn (Contract $c) => $this->fits($c, $vehicle));
+        }
 
-        $this->assertNotNull($haulable, 'Starter company has no haulable local contract.');
+        $this->assertNotNull($haulable, 'Starter company has no haulable local contract within 8 ticks.');
     }
 
     public function test_full_dispatch_and_resolution_pays_out_and_awards_xp(): void
@@ -84,18 +92,19 @@ class GameplayLoopTest extends TestCase
         $shipmentService = app(ShipmentService::class);
 
         $company = $companyService->found($user, 'Loop Co');
-        $this->artisan('world:tick');
 
         $vehicle = $company->vehicles()->with('model')->first();
         $driver = $company->drivers()->first();
 
-        $contract = Contract::onMarket()
-            ->where('origin_city_id', $company->headquarters_city_id)
-            ->with('commodity')
-            ->get()
-            ->first(fn (Contract $c) => $c->commodity->canBeCarriedBy($vehicle->model)
-                && $c->commodity->weight_per_unit * $c->units <= $vehicle->model->capacity_weight
-                && $c->commodity->volume_per_unit * $c->units <= $vehicle->model->capacity_volume);
+        $contract = null;
+        for ($i = 0; $i < 8 && ! $contract; $i++) {
+            $this->artisan('world:tick');
+            $contract = Contract::onMarket()
+                ->where('origin_city_id', $company->headquarters_city_id)
+                ->with('commodity')
+                ->get()
+                ->first(fn (Contract $c) => $this->fits($c, $vehicle));
+        }
 
         $this->assertNotNull($contract);
 
