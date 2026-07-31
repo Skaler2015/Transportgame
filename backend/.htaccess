@@ -1,0 +1,17 @@
+# Transoria — root .htaccess for shared hosting (e.g. Hostinger).
+#
+# The real front controller lives in public/. This lets the site work even when
+# the domain's document root points at THIS folder (public_html/Cargo) instead
+# of public_html/Cargo/public — every request is routed into public/, while the
+# application root (.env, vendor, config, …) stays private.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Hard-block direct access to sensitive top-level files (defense in depth).
+    RewriteRule ^(\.env|\.env\..*|composer\.(json|lock)|artisan|phpunit\.xml)$ - [F,L]
+
+    # Send everything into the Laravel public/ directory (public/.htaccess then
+    # takes over routing). The condition prevents an infinite public/public loop.
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
