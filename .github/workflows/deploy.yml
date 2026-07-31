@@ -1,9 +1,10 @@
 name: Deploy to Hostinger (cargo.playb.in)
 
 # Auto-publish on every push to the branches below. GitHub builds the app
-# (Composer + Vite), then rsyncs it to Hostinger over SSH and runs the
-# database migrations + cache warmup remotely. Configure the repository
-# Secrets listed under `env:` before the first run (see docs/DEPLOY_HOSTINGER.md).
+# (Composer + Vite), then publishes a fully-built copy to the `hostinger-live`
+# branch. Hostinger's own Git integration pulls that branch server-side (fast,
+# and never blocked by its firewall — unlike SSH/FTP from CI).
+# One-time setup + how the pull is triggered: docs/DEPLOY_HOSTINGER.md.
 
 on:
   push:
@@ -15,6 +16,9 @@ on:
 concurrency:
   group: deploy-production
   cancel-in-progress: true
+
+permissions:
+  contents: write   # allow pushing the built branch with GITHUB_TOKEN
 
 jobs:
   build-and-deploy:
@@ -54,28 +58,25 @@ jobs:
         working-directory: backend
         run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
-      # --- Deploy over FTP ---------------------------------------------------
-      # Hostinger's firewall blocks SSH from cloud/CI IPs, so we transfer over
-      # FTP (which it allows). The action keeps a sync-state file on the server
-      # and only uploads changed files, so after the first (slow) upload each
-      # deploy is fast. Database migrations are run once by you from your own
-      # machine's SSH — see docs/DEPLOY_HOSTINGER.md.
-      - name: Deploy to Hostinger via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftp
-          port: 21
-          local-dir: ./backend/
-          server-dir: ${{ secrets.FTP_SERVER_DIR }}
-          # Never upload secrets, VCS, the local dev DB, node modules or tests.
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-            .env
-            .env.*
-            database/database.sqlite
-            tests/**
+      # --- Publish the built app to the `hostinger-live` branch --------------
+      # The branch's ROOT is the Laravel app (artisan, app/, public/, vendor/…),
+      # so when Hostinger pulls it into public_html/cargo the app lands directly.
+      # A fresh history is force-pushed each time (no repo bloat). .env, VCS,
+      # the local dev DB and tests are never published.
+      - name: Publish built app to hostinger-live branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd backend
+          rm -rf .git
+          # Keep runtime + secret files out of the published branch.
+          rm -f .env .env.* database/database.sqlite
+          rm -rf tests node_modules
+          git init -q
+          git config user.email "deploy@transoria.local"
+          git config user.name "Transoria Deploy Bot"
+          git checkout -q -b hostinger-live
+          git add -A
+          git commit -q -m "Built release ${GITHUB_SHA}"
+          git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" hostinger-live
+          echo "Published built app to hostinger-live."

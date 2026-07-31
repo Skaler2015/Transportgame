@@ -176,13 +176,15 @@ See [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md) for the full design document.
 
 The repo ships a **GitHub Actions pipeline** ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml))
 that auto-publishes to **cargo.playb.in (Hostinger)** on every push: it builds the
-SPA + Composer deps and uploads the app over **FTP** (Hostinger blocks SSH from CI
-IPs). The whole game deploys as **one Laravel app** serving both `/api` and the
-compiled SPA (single docroot → `.../public`). Database migrations are run once from
-your own machine's SSH.
+SPA + Composer deps and pushes a fully-built copy to a **`hostinger-live`** branch,
+which **Hostinger's own Git integration pulls server-side** (fast, and never blocked
+by its firewall — unlike SSH/FTP from CI). The whole game deploys as **one Laravel
+app** serving both `/api` and the compiled SPA (single docroot → `.../public`).
+Database migrations are run once from your own machine's SSH.
 
-Set the four repository secrets (`FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD`,
-`FTP_SERVER_DIR`) and follow the one-time Hostinger setup in
+No deploy secrets are needed (the built branch is pushed with the built-in
+`GITHUB_TOKEN`). Follow the one-time Hostinger setup — connect the `hostinger-live`
+branch under hPanel → Git and add the webhook — in
 **[`docs/DEPLOY_HOSTINGER.md`](docs/DEPLOY_HOSTINGER.md)**. To build the deployable
 artifact locally: `bash scripts/build.sh`.
 
