@@ -21,6 +21,14 @@ const loading = ref(false)
 const accepting = ref<number | null>(null)
 const dispatching = ref<number | null>(null)
 const filters = ref({ origin_city_id: '', commodity_id: '', sort: 'distance_km' })
+// Mobile: filters start collapsed to save space; a toggle shows/hides them.
+// Desktop keeps them always open (CSS `sm:flex` wins over `hidden`).
+const filtersOpen = ref(false)
+const activeFilterCount = computed(() =>
+  (filters.value.origin_city_id ? 1 : 0)
+  + (filters.value.commodity_id ? 1 : 0)
+  + (dropdownSort.value !== 'eta' ? 1 : 0),
+)
 const haulableOnly = ref(true)
 // On by default: show jobs starting where your trucks are (parked or arriving),
 // so a free truck always sees local work first. Untick to see the whole market.
@@ -441,9 +449,23 @@ onUnmounted(() => clearInterval(poll))
       </div>
     </div>
 
-    <!-- Filters — packed into a 2-col grid on mobile, unchanged flex row on
-         desktop via `sm:contents` (the wrappers dissolve at ≥sm). -->
-    <div class="glass p-3 sm:p-4 space-y-2.5 sm:space-y-0 sm:flex sm:flex-wrap sm:gap-3 sm:items-end">
+    <!-- Filters — collapsible on mobile (tap to show/hide), always open on
+         desktop. Body is a 2-col grid on mobile, flex row on ≥sm via
+         `sm:contents` (the wrappers dissolve). -->
+    <div class="glass p-3 sm:p-4">
+      <!-- Mobile toggle: show/hide the whole filter panel at will. -->
+      <button type="button"
+        class="sm:hidden w-full flex items-center justify-between gap-2"
+        @click="filtersOpen = !filtersOpen">
+        <span class="text-sm font-semibold flex items-center gap-2">
+          🔍 Filters
+          <span v-if="activeFilterCount" class="chip bg-brand/15 text-brand-soft">{{ activeFilterCount }}</span>
+        </span>
+        <span class="text-xs text-brand-soft">{{ filtersOpen ? 'Hide ▲' : 'Show ▼' }}</span>
+      </button>
+
+      <div :class="filtersOpen ? 'flex' : 'hidden'"
+        class="mt-3 sm:mt-0 flex-col gap-2.5 sm:flex sm:flex-row sm:flex-wrap sm:gap-3 sm:items-end">
       <div class="grid grid-cols-2 gap-2 sm:contents">
         <div class="sm:flex-1 sm:min-w-[160px]">
           <label class="stat-label">Origin</label>
@@ -488,6 +510,7 @@ onUnmounted(() => clearInterval(poll))
           <input type="checkbox" v-model="haulableOnly" class="accent-brand h-4 w-4" @change="load()" />
           Only what my fleet can haul
         </label>
+      </div>
       </div>
     </div>
 
