@@ -315,7 +315,15 @@ function autoSelect(c: Contract) {
   if (!sel.trailer_id && needsTrailer(c)) sel.trailer_id = bestTrailer(c)?.id ?? null
 }
 
-type CSortKey = 'cargo' | 'from' | 'to' | 'status' | 'dist' | 'load' | 'eta' | 'value' | 'profit' | 'diff'
+type CSortKey = 'cargo' | 'from' | 'to' | 'status' | 'dist' | 'load' | 'eta' | 'value' | 'profit' | 'permin' | 'diff'
+// Estimated travel time (seconds/minutes) for a lane, mirroring etaText.
+function etaSeconds(km: number): number {
+  return Math.max(20, Math.round((km / KM_PER_MIN) * 60))
+}
+// The real efficiency metric: profit earned per minute the truck is busy.
+function profitPerMin(c: Contract): number {
+  return costBreakdown(c).profit / (etaSeconds(c.distance_km ?? 0) / 60)
+}
 // Default: shortest ETA on top.
 const cSort = ref<{ k: CSortKey; dir: 'asc' | 'desc' }>({ k: 'eta', dir: 'asc' })
 function clickSort(k: CSortKey) {
@@ -329,9 +337,9 @@ function sortMark(k: CSortKey): string {
 const dropdownSort = ref<CSortKey>('eta')
 function applyDropdownSort() {
   const k = dropdownSort.value
-  cSort.value = { k, dir: (k === 'value' || k === 'profit') ? 'desc' : 'asc' }
+  cSort.value = { k, dir: (k === 'value' || k === 'profit' || k === 'permin') ? 'desc' : 'asc' }
   // Fetch the matching slice from the server, then client-sort it.
-  filters.value.sort = (k === 'value' || k === 'profit') ? 'payout' : k === 'diff' ? 'difficulty' : 'distance_km'
+  filters.value.sort = (k === 'value' || k === 'profit' || k === 'permin') ? 'payout' : k === 'diff' ? 'difficulty' : 'distance_km'
   load()
 }
 function cVal(c: Contract, k: CSortKey): number | string {
@@ -344,6 +352,7 @@ function cVal(c: Contract, k: CSortKey): number | string {
     case 'load': return c.total_weight ?? 0
     case 'value': return c.payout ?? 0
     case 'profit': return costBreakdown(c).profit
+    case 'permin': return profitPerMin(c)
     default: return c.difficulty ?? 0
   }
 }
@@ -579,6 +588,7 @@ onUnmounted(() => clearInterval(poll))
               <option value="eta">Soonest ETA</option>
               <option value="value">Highest payout</option>
               <option value="profit">Best profit</option>
+              <option value="permin">Best ₹/min</option>
               <option value="diff">Easiest</option>
             </select>
           </div>
@@ -736,6 +746,7 @@ onUnmounted(() => clearInterval(poll))
               <td class="px-2 text-right font-mono text-gold font-semibold whitespace-nowrap">{{ credits(c.payout) }}</td>
               <td class="px-2 text-right font-mono font-semibold whitespace-nowrap" :class="costBreakdown(c).profit >= 0 ? 'text-gain' : 'text-loss'">
                 {{ credits(costBreakdown(c).profit) }}
+                <div class="text-[10px] text-brand-soft font-normal">{{ credits(profitPerMin(c)) }}/min</div>
               </td>
               <td class="px-2 text-center"><DifficultyStars :value="c.difficulty" /></td>
               <td class="px-3 py-2 text-right whitespace-nowrap">
@@ -818,6 +829,7 @@ onUnmounted(() => clearInterval(poll))
             <div class="flex items-center justify-between mt-1.5 text-[12px]">
               <span class="text-slate-400">Profit
                 <span class="font-mono font-semibold" :class="costBreakdown(c).profit >= 0 ? 'text-gain' : 'text-loss'">{{ credits(costBreakdown(c).profit) }}</span>
+                <span class="text-[10px] text-brand-soft ml-1">· {{ credits(profitPerMin(c)) }}/min</span>
               </span>
               <!-- Ready jobs get a one-tap GO right here; others expand to choose. -->
               <span v-if="expandedContract === c.id" class="text-brand-soft font-semibold text-[11px]">Close ▲</span>
