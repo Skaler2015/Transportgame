@@ -11,10 +11,12 @@ const toast = useToastStore()
 const drivers = ref<Driver[]>([])
 const hiring = ref(false)
 const working = ref<number | null>(null)
+const costs = ref({ hire: 3500_00, train: 0, licence: 0, vacation: 0, licence_days: 30 })
 
 async function load() {
   const { data } = await api.get('/drivers')
   drivers.value = data.data
+  if (data.costs) costs.value = data.costs
 }
 
 async function action(d: Driver, type: 'train' | 'licence' | 'vacation') {
@@ -62,7 +64,7 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
         <h1 class="text-2xl font-bold">Crew</h1>
         <p class="text-slate-400 text-sm">Your drivers. Skill lifts speed &amp; safety; fatigue does the opposite.</p>
       </div>
-      <button class="btn-primary" :disabled="hiring" @click="hire">＋ Hire Driver ({{ credits(3500_00) }})</button>
+      <button class="btn-primary" :disabled="hiring" @click="hire">＋ Hire Driver ({{ credits(costs.hire) }})</button>
     </div>
 
     <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -106,11 +108,20 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
           <span v-if="d.hazmat_licence" class="chip bg-loss/15 text-loss">☣ Hazmat</span>
         </div>
 
-        <!-- HR actions -->
+        <!-- HR actions (price shown under each) -->
         <div class="grid grid-cols-3 gap-1.5 mt-3 pt-3 border-t border-white/5">
-          <button class="btn-ghost !py-1 text-[10px]" :disabled="working === d.id" @click="action(d, 'train')">🎓 Train</button>
-          <button class="btn-ghost !py-1 text-[10px]" :class="!d.is_licensed && 'ring-1 ring-loss/50'" :disabled="working === d.id" @click="action(d, 'licence')">📋 Licence</button>
-          <button class="btn-ghost !py-1 text-[10px]" :disabled="working === d.id || d.status === 'driving'" @click="action(d, 'vacation')">🏖 Rest</button>
+          <button class="btn-ghost !py-1 !flex-col gap-0.5 leading-tight" :disabled="working === d.id" @click="action(d, 'train')" title="+ skill & specialties">
+            <span class="text-[10px]">🎓 Train</span>
+            <span class="text-[9px] font-mono text-slate-400">{{ credits(costs.train) }}</span>
+          </button>
+          <button class="btn-ghost !py-1 !flex-col gap-0.5 leading-tight" :class="!d.is_licensed && 'ring-1 ring-loss/50'" :disabled="working === d.id" @click="action(d, 'licence')" :title="`Renew for ${costs.licence_days} days`">
+            <span class="text-[10px]">📋 Licence</span>
+            <span class="text-[9px] font-mono text-slate-400">{{ credits(costs.licence) }}</span>
+          </button>
+          <button class="btn-ghost !py-1 !flex-col gap-0.5 leading-tight" :disabled="working === d.id || d.status === 'driving'" @click="action(d, 'vacation')" title="Rest: restore health & fatigue">
+            <span class="text-[10px]">🏖 Rest</span>
+            <span class="text-[9px] font-mono text-slate-400">{{ credits(costs.vacation) }}</span>
+          </button>
         </div>
       </div>
       <div v-if="!drivers.length" class="glass p-8 text-center text-slate-400 col-span-full">No crew yet.</div>

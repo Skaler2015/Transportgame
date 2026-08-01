@@ -22,6 +22,15 @@ const dispatching = ref<number | null>(null)
 const filters = ref({ origin_city_id: '', commodity_id: '', sort: 'payout' })
 const haulableOnly = ref(true)
 const backhaulOnly = ref(false)
+
+// Your HQ city — newly bought trucks spawn here, so "jobs leaving HQ" is the
+// natural first-leg view. Toggling it just pins the origin filter to HQ.
+const hqCityId = computed(() => game.dashboard?.company?.headquarters?.id ?? null)
+const hqOnly = ref(false)
+function toggleHq() {
+  filters.value.origin_city_id = hqOnly.value && hqCityId.value ? String(hqCityId.value) : ''
+  load()
+}
 const selection = ref<Record<number, { vehicle_id: number | null; trailer_id: number | null; driver_id: number | null }>>({})
 
 const sortedCities = computed(() => [...game.cities].sort((a, b) => a.name.localeCompare(b.name)))
@@ -210,7 +219,7 @@ onUnmounted(() => clearInterval(poll))
     <div class="glass p-4 flex flex-wrap gap-3 items-end">
       <div class="flex-1 min-w-[160px]">
         <label class="stat-label">Origin</label>
-        <select v-model="filters.origin_city_id" class="input mt-1" @change="load()">
+        <select v-model="filters.origin_city_id" class="input mt-1" @change="hqOnly = String(filters.origin_city_id) === String(hqCityId ?? ''); load()">
           <option value="">Any city</option>
           <option v-for="c in sortedCities" :key="c.id" :value="c.id">{{ c.name }}</option>
         </select>
@@ -232,7 +241,13 @@ onUnmounted(() => clearInterval(poll))
         </select>
       </div>
       <button class="btn-ghost" @click="load()">↻ Refresh</button>
-      <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none ml-auto"
+      <label v-if="hqCityId" class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none ml-auto"
+        title="Only jobs leaving your HQ — where your new trucks are parked.">
+        <input type="checkbox" v-model="hqOnly" class="accent-brand h-4 w-4" @change="toggleHq" />
+        🏭 From my HQ
+      </label>
+      <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none"
+        :class="hqCityId ? '' : 'ml-auto'"
         title="Jobs that start in a city where one of your trucks is already parked — no empty run back.">
         <input type="checkbox" v-model="backhaulOnly" class="accent-brand h-4 w-4" @change="load()" />
         🚚 Backhaul from my trucks

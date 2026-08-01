@@ -52,7 +52,19 @@ class DriverController extends Controller
             ->orderByDesc('skill')
             ->get();
 
-        return DriverResource::collection($drivers);
+        // Surface HR action prices so the UI can label its buttons without
+        // hard-coding figures that could drift from config.
+        $cfg = config('transoria.driver');
+
+        return DriverResource::collection($drivers)->additional([
+            'costs' => [
+                'hire' => 3500_00,
+                'train' => (int) ($cfg['train_cost'] ?? 0),
+                'licence' => (int) ($cfg['licence_cost'] ?? 0),
+                'vacation' => (int) ($cfg['vacation_cost'] ?? 0),
+                'licence_days' => (int) ($cfg['licence_days'] ?? 30),
+            ],
+        ]);
     }
 
     /** Hire a new driver from the labour market. */
