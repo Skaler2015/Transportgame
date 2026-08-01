@@ -294,10 +294,10 @@ class GameplayLoopTest extends TestCase
         $this->assertTrue($flagged['fleet_arriving'], 'It should read as arriving (truck still en route).');
     }
 
-    public function test_completing_a_run_auto_services_the_truck_and_records_the_cost(): void
+    public function test_completing_a_run_auto_refuels_the_truck_and_records_the_cost(): void
     {
-        // On arrival the truck is auto-serviced & refuelled, charged as a small
-        // per-run line item recorded on the shipment — no big lump sum later.
+        // On arrival the truck is auto-REFUELLED (fuel only — servicing stays
+        // manual), charged as a small per-run line item on the shipment.
         $user = User::factory()->create();
         $companyService = app(CompanyService::class);
         $shipmentService = app(ShipmentService::class);
@@ -323,10 +323,8 @@ class GameplayLoopTest extends TestCase
         $shipmentService->resolve($shipment->fresh());
 
         $v = $vehicle->fresh();
-        // Truck came back fully serviced & fuelled...
-        $this->assertEquals(100, $v->condition);
+        // Tank was topped back up, and the fuel cost was recorded on the run.
         $this->assertEquals((float) $v->model->fuel_capacity, (float) $v->fuel);
-        // ...and the cost was recorded against the run.
         $this->assertGreaterThan(0, $shipment->fresh()->service_cost);
     }
 

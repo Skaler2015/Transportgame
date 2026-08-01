@@ -3,7 +3,8 @@ import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
-import type { Contract, Vehicle, Trailer, Driver } from '../types'
+import { useClock } from '../composables/useClock'
+import type { Contract, Vehicle, Trailer, Driver, Shipment } from '../types'
 import { credits, num } from '../utils/format'
 import CommodityBadge from '../components/CommodityBadge.vue'
 import DifficultyStars from '../components/DifficultyStars.vue'
@@ -66,32 +67,49 @@ async function load(silent = false) {
   }
 }
 
-interface Upkeep {
-  repair_cost_per_point: number; tire_cost_per_point: number
-  oil_change_cost: number; battery_cost: number
-  condition_loss_per_1000km: number; tire_loss_per_1000km: number
-  oil_loss_per_1000km: number; battery_loss_per_1000km: number
-}
-const upkeep = ref<Upkeep | null>(null)
-
 async function loadFleet() {
   const [f, tr, d] = await Promise.allSettled([api.get('/fleet'), api.get('/trailers'), api.get('/drivers')])
-  if (f.status === 'fulfilled') {
-    vehicles.value = f.value.data.data
-    if (f.value.data.upkeep) upkeep.value = f.value.data.upkeep
-  }
+  if (f.status === 'fulfilled') vehicles.value = f.value.data.data
   if (tr.status === 'fulfilled') trailers.value = tr.value.data.data
   if (d.status === 'fulfilled') drivers.value = d.value.data.data
   void loadEstimate()
 }
 
-const serviceEstimate = ref<{ count: number; total: number }>({ count: 0, total: 0 })
+const upkeepEst = ref<{ service: { count: number; total: number }; fuel: { count: number; total: number } }>(
+  { service: { count: 0, total: 0 }, fuel: { count: 0, total: 0 } },
+)
 async function loadEstimate() {
   try {
     const { data } = await api.get('/fleet/service-estimate')
-    serviceEstimate.value = data
+    upkeepEst.value = data
   } catch { /* estimate is best-effort */ }
 }
+
+// --- Side panel: live fleet at a glance -------------------------------------
+const now = useClock(1000)
+const shipments = ref<Shipment[]>([])
+async function loadShipments() {
+  try {
+    const { data } = await api.get('/shipments')
+    shipments.value = data.data
+  } catch { /* best-effort */ }
+}
+// On the road, soonest arrival first.
+const onTheRoad = computed(() =>
+  shipments.value
+    .filter((s) => s.status === 'en_route')
+    .sort((a, b) => new Date(a.eta_at).getTime() - new Date(b.eta_at).getTime()),
+)
+function etaLeft(s: Shipment): string {
+  const ms = new Date(s.eta_at).getTime() - now.value
+  if (ms <= 0) return 'arriving…'
+  const secs = Math.round(ms / 1000)
+  const m = Math.floor(secs / 60)
+  const sec = secs % 60
+  return m ? `${m}m ${sec}s` : `${sec}s`
+}
+// Free (idle) vehicles and where they're parked.
+const freeVehicles = computed(() => vehicles.value.filter((v) => v.available))
 
 // ---- compatibility (mirrors Operations) -----------------------------------
 function modeOk(v: Vehicle, c: Contract): boolean {
@@ -150,32 +168,32 @@ function costBreakdown(c: Contract) {
   const toll = Math.round(dist * avgToll * 100)
   const m = estFuelModel(c)
 
-  // Service & fuel auto-charged on arrival: fuel + repair + oil + battery,
-  // matching GarageService::serviceOnArrival (all figures in cents).
-  const fuelOnly = m ? dist * (m.fuel_economy || 0) * (c.origin?.fuel_price ?? 0) * 100 : 0
-  const u = upkeep.value
-  const wear = u
-    ? (dist / 1000) * (u.condition_loss_per_1000km * u.repair_cost_per_point
-        + u.tire_loss_per_1000km * u.tire_cost_per_point
-        + (u.oil_loss_per_1000km / 100) * u.oil_change_cost
-        + (u.battery_loss_per_1000km / 100) * u.battery_cost)
-    : 0
-  const service = Math.round(fuelOnly + (m ? wear : 0))
+  // Only FUEL is auto-charged on arrival (servicing is manual), so the per-run
+  // deduction the player sees is fuel. Costs in cents.
+  const fuel = m ? Math.round(dist * (m.fuel_economy || 0) * (c.origin?.fuel_price ?? 0) * 100) : 0
 
-  const expenses = tax + toll + service
-  return { tax, toll, service, expenses, profit: (c.payout || 0) - expenses, hasVehicle: !!m }
+  const expenses = tax + toll + fuel
+  return { tax, toll, fuel, expenses, profit: (c.payout || 0) - expenses, hasVehicle: !!m }
 }
 
-const servicingAll = ref(false)
+const busyUpkeep = ref<'service' | 'fuel' | null>(null)
 async function serviceAll() {
-  servicingAll.value = true
+  busyUpkeep.value = 'service'
   try {
-    const { data } = await api.post('/fleet/full-service-all')
+    const { data } = await api.post('/fleet/service-all')
     toast.success(data.message)
-    await loadFleet()
-    load(true)
+    await loadFleet(); load(true)
     game.refreshDashboard().catch(() => {})
-  } catch (e) { toast.error(apiError(e)) } finally { servicingAll.value = false }
+  } catch (e) { toast.error(apiError(e)) } finally { busyUpkeep.value = null }
+}
+async function fuelAll() {
+  busyUpkeep.value = 'fuel'
+  try {
+    const { data } = await api.post('/fleet/refuel-all')
+    toast.success(data.message)
+    await loadFleet(); load(true)
+    game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)) } finally { busyUpkeep.value = null }
 }
 
 async function accept(c: Contract) {
@@ -218,24 +236,33 @@ async function dispatchNow(c: Contract) {
 onMounted(async () => {
   await game.loadReference().catch(() => {})
   await loadFleet().catch(() => {})
+  loadShipments()
   load()
-  poll = window.setInterval(() => load(true), 15000)
+  poll = window.setInterval(() => { load(true); loadShipments(); loadFleet().catch(() => {}) }, 15000)
 })
 onUnmounted(() => clearInterval(poll))
 </script>
 
 <template>
-  <div class="space-y-5">
+  <div class="lg:flex lg:gap-5 lg:items-start">
+   <div class="flex-1 min-w-0 space-y-5">
     <div class="flex items-end justify-between flex-wrap gap-3">
       <div>
         <h1 class="text-2xl font-bold">Contract Market</h1>
         <p class="text-slate-400 text-sm">Claim a job and dispatch it right here. Auto-refreshes as new jobs appear.</p>
       </div>
-      <button class="btn-ghost !py-1.5" :disabled="servicingAll || serviceEstimate.count === 0" @click="serviceAll">
-        <template v-if="servicingAll">Servicing…</template>
-        <template v-else-if="serviceEstimate.count > 0">⚡ Service &amp; Fuel All · {{ credits(serviceEstimate.total) }}</template>
-        <template v-else>⚡ Service &amp; Fuel All</template>
-      </button>
+      <div class="flex gap-2">
+        <button class="btn-ghost !py-1.5" :disabled="busyUpkeep !== null || upkeepEst.service.count === 0" @click="serviceAll">
+          <template v-if="busyUpkeep === 'service'">Servicing…</template>
+          <template v-else-if="upkeepEst.service.count > 0">🔧 Service All · {{ credits(upkeepEst.service.total) }}</template>
+          <template v-else>🔧 Service All</template>
+        </button>
+        <button class="btn-ghost !py-1.5" :disabled="busyUpkeep !== null || upkeepEst.fuel.count === 0" @click="fuelAll">
+          <template v-if="busyUpkeep === 'fuel'">Fuelling…</template>
+          <template v-else-if="upkeepEst.fuel.count > 0">⛽ Fuel All · {{ credits(upkeepEst.fuel.total) }}</template>
+          <template v-else>⛽ Fuel All</template>
+        </button>
+      </div>
     </div>
 
     <!-- Filters -->
@@ -315,8 +342,8 @@ onUnmounted(() => clearInterval(poll))
             <span class="font-mono text-gold font-semibold">{{ credits(c.payout) }}</span>
           </div>
           <div class="flex items-center justify-between text-[12px] text-slate-400">
-            <span>Service &amp; fuel {{ costBreakdown(c).hasVehicle ? '(est.)' : '' }}</span>
-            <span class="font-mono">{{ costBreakdown(c).hasVehicle ? '−' + credits(costBreakdown(c).service) : 'pick a truck' }}</span>
+            <span>Fuel {{ costBreakdown(c).hasVehicle ? '(est.)' : '' }}</span>
+            <span class="font-mono">{{ costBreakdown(c).hasVehicle ? '−' + credits(costBreakdown(c).fuel) : 'pick a truck' }}</span>
           </div>
           <div class="flex items-center justify-between text-[12px] text-slate-400">
             <span>Tolls</span>
@@ -378,5 +405,39 @@ onUnmounted(() => clearInterval(poll))
         Free up or buy a bigger truck, or untick “Only what my fleet can haul” to see everything.
       </p>
     </div>
+   </div>
+
+   <!-- Live fleet side panel -->
+   <aside class="lg:w-72 shrink-0 space-y-4 lg:sticky lg:top-20">
+     <!-- On the road: route + time left, soonest first -->
+     <div class="glass p-4">
+       <h3 class="font-semibold text-sm mb-2">
+         On the Road <span class="chip bg-brand/15 text-brand-soft ml-1">{{ onTheRoad.length }}</span>
+       </h3>
+       <div v-if="onTheRoad.length" class="divide-y divide-white/5">
+         <div v-for="s in onTheRoad" :key="s.id" class="flex items-center justify-between py-2 text-xs gap-2">
+           <span class="truncate">{{ s.contract?.origin?.name }} → {{ s.contract?.destination?.name }}</span>
+           <span class="font-mono shrink-0" :class="etaLeft(s) === 'arriving…' ? 'text-gain' : 'text-brand-soft'">
+             ⏱ {{ etaLeft(s) }}
+           </span>
+         </div>
+       </div>
+       <p v-else class="text-xs text-slate-500">Nothing en route right now.</p>
+     </div>
+
+     <!-- Free vehicles and where they're parked -->
+     <div class="glass p-4">
+       <h3 class="font-semibold text-sm mb-2">
+         Free Vehicles <span class="chip bg-gain/15 text-gain ml-1">{{ freeVehicles.length }}</span>
+       </h3>
+       <div v-if="freeVehicles.length" class="divide-y divide-white/5">
+         <div v-for="v in freeVehicles" :key="v.id" class="flex items-center justify-between py-2 text-xs gap-2">
+           <span class="truncate">{{ v.nickname || v.model?.name }}</span>
+           <span class="text-slate-400 shrink-0 truncate">📍 {{ v.city?.name || '—' }}</span>
+         </div>
+       </div>
+       <p v-else class="text-xs text-slate-500">All trucks are out on the road.</p>
+     </div>
+   </aside>
   </div>
 </template>

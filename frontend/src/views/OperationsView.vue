@@ -54,11 +54,13 @@ async function loadAll() {
   if (m.status === 'rejected') throw m.reason
 }
 
-const serviceEstimate = ref<{ count: number; total: number }>({ count: 0, total: 0 })
+const upkeepEst = ref<{ service: { count: number; total: number }; fuel: { count: number; total: number } }>(
+  { service: { count: 0, total: 0 }, fuel: { count: 0, total: 0 } },
+)
 async function loadEstimate() {
   try {
     const { data } = await api.get('/fleet/service-estimate')
-    serviceEstimate.value = data
+    upkeepEst.value = data
   } catch { /* estimate is best-effort */ }
 }
 
@@ -134,15 +136,24 @@ function etaLeft(s: Shipment): string {
 }
 const pastShipments = computed(() => shipments.value.filter((s) => s.status !== 'en_route').slice(0, 8))
 
-const servicingAll = ref(false)
+const busyUpkeep = ref<'service' | 'fuel' | null>(null)
 async function serviceAll() {
-  servicingAll.value = true
+  busyUpkeep.value = 'service'
   try {
-    const { data } = await api.post('/fleet/full-service-all')
+    const { data } = await api.post('/fleet/service-all')
     toast.success(data.message)
     await loadAll()
     game.refreshDashboard().catch(() => {})
-  } catch (e) { toast.error(apiError(e)) } finally { servicingAll.value = false }
+  } catch (e) { toast.error(apiError(e)) } finally { busyUpkeep.value = null }
+}
+async function fuelAll() {
+  busyUpkeep.value = 'fuel'
+  try {
+    const { data } = await api.post('/fleet/refuel-all')
+    toast.success(data.message)
+    await loadAll()
+    game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)) } finally { busyUpkeep.value = null }
 }
 
 async function refuel(c: Contract) {
@@ -208,11 +219,18 @@ onUnmounted(() => clearInterval(poll))
         <h1 class="text-2xl font-bold">Operations — Job Board</h1>
         <p class="text-slate-400 text-sm">Assign a vehicle, a matching trailer, a driver and fuel — then roll.</p>
       </div>
-      <button class="btn-ghost !py-1.5" :disabled="servicingAll || serviceEstimate.count === 0" @click="serviceAll">
-        <template v-if="servicingAll">Servicing…</template>
-        <template v-else-if="serviceEstimate.count > 0">⚡ Service &amp; Fuel All · {{ credits(serviceEstimate.total) }}</template>
-        <template v-else>⚡ Service &amp; Fuel All</template>
-      </button>
+      <div class="flex gap-2">
+        <button class="btn-ghost !py-1.5" :disabled="busyUpkeep !== null || upkeepEst.service.count === 0" @click="serviceAll">
+          <template v-if="busyUpkeep === 'service'">Servicing…</template>
+          <template v-else-if="upkeepEst.service.count > 0">🔧 Service All · {{ credits(upkeepEst.service.total) }}</template>
+          <template v-else>🔧 Service All</template>
+        </button>
+        <button class="btn-ghost !py-1.5" :disabled="busyUpkeep !== null || upkeepEst.fuel.count === 0" @click="fuelAll">
+          <template v-if="busyUpkeep === 'fuel'">Fuelling…</template>
+          <template v-else-if="upkeepEst.fuel.count > 0">⛽ Fuel All · {{ credits(upkeepEst.fuel.total) }}</template>
+          <template v-else>⛽ Fuel All</template>
+        </button>
+      </div>
     </div>
 
     <!-- Ready to dispatch -->
@@ -349,8 +367,8 @@ onUnmounted(() => clearInterval(poll))
           <div class="text-right shrink-0">
             <p class="font-semibold uppercase text-xs" :class="statusStyle[s.status]">{{ s.status }}</p>
             <p class="font-mono text-[11px] text-gold">{{ credits(s.projected_payout) }}</p>
-            <p v-if="(s.service_cost ?? 0) > 0" class="font-mono text-[10px] text-loss" title="Auto service & fuel charged on arrival">
-              🔧 −{{ credits(s.service_cost ?? 0) }}
+            <p v-if="(s.service_cost ?? 0) > 0" class="font-mono text-[10px] text-loss" title="Auto-refuel charged on arrival">
+              ⛽ −{{ credits(s.service_cost ?? 0) }}
             </p>
           </div>
         </div>

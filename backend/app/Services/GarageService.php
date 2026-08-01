@@ -191,53 +191,33 @@ class GarageService
     }
 
     /**
-     * Auto service & refuel a truck the moment a run ends. Unlike a manual full
-     * service (which charges the FLAT oil/battery fees), this charges upkeep
-     * PROPORTIONALLY to what the trip actually consumed — a small oil/battery
-     * top-up costs a small fraction of the full fee — so upkeep is a modest
-     * per-trip line item, never a lump sum. Best-effort: if cash is short it
-     * skips (cost 0) rather than failing the caller.
+     * Auto-REFUEL a truck the moment a run ends — fuel only, no service. Keeps
+     * the tank topped up so the next dispatch isn't blocked on fuel, charged as
+     * a small per-trip line item. Servicing (repair/oil/battery) stays manual.
+     * Best-effort: if cash is short it skips (cost 0) rather than failing.
      *
      * @return array{vehicle: Vehicle, cost: int}
      */
-    public function serviceOnArrival(Company $company, Vehicle $vehicle): array
+    public function refuelOnArrival(Company $company, Vehicle $vehicle): array
     {
         $vehicle->loadMissing('model', 'city');
-        $g = config('transoria.garage');
-
-        $repairCost = (100 - $vehicle->condition) * $g['repair_cost_per_point']
-            + $vehicle->tire_wear * $g['tire_cost_per_point'];
-        // Proportional to the charge/oil actually used this trip (we top back to
-        // 100), so a 20%-drained tank of oil costs 20% of a full oil change.
-        $oilCost = (100 - $vehicle->oil_level) / 100 * $g['oil_change_cost'];
-        $battCost = (100 - $vehicle->battery) / 100 * $g['battery_cost'];
 
         $capacity = (float) ($vehicle->model->fuel_capacity ?? 0);
         $room = max(0, $capacity - $vehicle->fuel);
         $pricePerLitre = $vehicle->city->fuel_price ?? $company->headquarters?->fuel_price ?? 1.0;
-        $fuelCost = $room * $pricePerLitre * 100;
+        $fuelCost = (int) round($room * $pricePerLitre * 100);
 
-        $total = (int) round($repairCost + $oilCost + $battCost + $fuelCost);
-        if ($total <= 0 || $company->cash < $total) {
+        if ($fuelCost <= 0 || $company->cash < $fuelCost) {
             return ['vehicle' => $vehicle, 'cost' => 0];
         }
 
         $this->ledger->post($company, LedgerEntry::CAT_UPKEEP,
-            "Service & refuel: {$vehicle->model->name}", -$total, $vehicle);
+            "Refuel: {$vehicle->model->name}", -$fuelCost, $vehicle);
 
-        $vehicle->condition = 100;
-        $vehicle->tire_wear = 0;
-        $vehicle->oil_level = 100;
-        $vehicle->battery = 100;
-        if ($capacity > 0) {
-            $vehicle->fuel = $capacity;
-        }
-        if ($vehicle->status === Vehicle::STATUS_MAINTENANCE) {
-            $vehicle->status = Vehicle::STATUS_IDLE;
-        }
+        $vehicle->fuel = $capacity;
         $vehicle->save();
 
-        return ['vehicle' => $vehicle, 'cost' => $total];
+        return ['vehicle' => $vehicle, 'cost' => $fuelCost];
     }
 
     /**
@@ -286,6 +266,133 @@ class GarageService
         }
 
         return ['count' => $count, 'total' => $total];
+    }
+
+    /** Non-fuel service cost for one vehicle: repair + tyres + oil + battery. */
+    public function serviceCostOnly(Vehicle $vehicle): int
+    {
+        $vehicle->loadMissing('model');
+        $g = config('transoria.garage');
+
+        $repair = (100 - $vehicle->condition) * $g['repair_cost_per_point']
+            + $vehicle->tire_wear * $g['tire_cost_per_point'];
+        $oil = $vehicle->oil_level < 100 ? (int) $g['oil_change_cost'] : 0;
+        $batt = $vehicle->battery < 100 ? (int) $g['battery_cost'] : 0;
+
+        return (int) round($repair + $oil + $batt);
+    }
+
+    /** Fuel cost to fill one vehicle's tank at its current city. */
+    public function refuelCost(Company $company, Vehicle $vehicle): int
+    {
+        $vehicle->loadMissing('model', 'city');
+        $capacity = (float) ($vehicle->model->fuel_capacity ?? 0);
+        $room = max(0, $capacity - $vehicle->fuel);
+        $price = $vehicle->city->fuel_price ?? $company->headquarters?->fuel_price ?? 1.0;
+
+        return (int) round($room * $price * 100);
+    }
+
+    /**
+     * Dry-run totals for the separate "Service All" and "Fuel All" actions over
+     * idle vehicles: how many need each and the total bill for each.
+     *
+     * @return array{service: array{count:int,total:int}, fuel: array{count:int,total:int}}
+     */
+    public function estimateUpkeepAll(Company $company): array
+    {
+        $vehicles = Vehicle::where('company_id', $company->id)
+            ->where('status', Vehicle::STATUS_IDLE)
+            ->with('model', 'city')->get();
+
+        $svc = ['count' => 0, 'total' => 0];
+        $fuel = ['count' => 0, 'total' => 0];
+
+        foreach ($vehicles as $v) {
+            $s = $this->serviceCostOnly($v);
+            if ($s > 0) {
+                $svc['count']++;
+                $svc['total'] += $s;
+            }
+            $f = $this->refuelCost($company, $v);
+            if ($f > 0) {
+                $fuel['count']++;
+                $fuel['total'] += $f;
+            }
+        }
+
+        return ['service' => $svc, 'fuel' => $fuel];
+    }
+
+    /**
+     * Service (repair + tyres + oil + battery, NO fuel) every idle vehicle,
+     * stopping when cash runs out.
+     *
+     * @return array{serviced:int, total:int}
+     */
+    public function serviceAll(Company $company): array
+    {
+        $vehicles = Vehicle::where('company_id', $company->id)
+            ->where('status', Vehicle::STATUS_IDLE)
+            ->with('model')->get();
+
+        $count = 0;
+        $total = 0;
+        foreach ($vehicles as $v) {
+            $cost = $this->serviceCostOnly($v);
+            if ($cost <= 0) {
+                continue;
+            }
+            if ($company->cash < $cost) {
+                break;
+            }
+            $this->ledger->post($company, LedgerEntry::CAT_UPKEEP,
+                "Service: {$v->model->name}", -$cost, $v);
+            $v->condition = 100;
+            $v->tire_wear = 0;
+            $v->oil_level = 100;
+            $v->battery = 100;
+            if ($v->status === Vehicle::STATUS_MAINTENANCE) {
+                $v->status = Vehicle::STATUS_IDLE;
+            }
+            $v->save();
+            $count++;
+            $total += $cost;
+        }
+
+        return ['serviced' => $count, 'total' => $total];
+    }
+
+    /**
+     * Refuel every idle vehicle to a full tank, stopping when cash runs out.
+     *
+     * @return array{fuelled:int, total:int}
+     */
+    public function refuelAll(Company $company): array
+    {
+        $vehicles = Vehicle::where('company_id', $company->id)
+            ->where('status', Vehicle::STATUS_IDLE)
+            ->with('model', 'city')->get();
+
+        $count = 0;
+        $total = 0;
+        foreach ($vehicles as $v) {
+            $cost = $this->refuelCost($company, $v);
+            if ($cost <= 0) {
+                continue;
+            }
+            if ($company->cash < $cost) {
+                break;
+            }
+            $this->ledger->post($company, LedgerEntry::CAT_UPKEEP,
+                "Refuel: {$v->model->name}", -$cost, $v);
+            $v->fuel = (float) ($v->model->fuel_capacity ?? $v->fuel);
+            $v->save();
+            $count++;
+            $total += $cost;
+        }
+
+        return ['fuelled' => $count, 'total' => $total];
     }
 
     /** Buy the next level of an upgrade (engine|tires|trailer). */

@@ -340,13 +340,11 @@ class ShipmentService
             $vehicle->city_id = $contract->destination_city_id;
             $vehicle->save();
 
-            // Auto full-service & refuel on arrival: charge this trip's wear and
-            // fuel now, as a small line item, so the player never faces a big
-            // maintenance bill later. Best-effort — if cash is short we simply
-            // skip it (the truck can be serviced manually) rather than fail the run.
+            // Auto-REFUEL on arrival (fuel only) so the tank is ready for the
+            // next run — a small per-trip line item. Servicing stays manual.
             $serviceCost = 0;
-            if (config('transoria.shipment.auto_service_on_arrival', true)) {
-                $result = $this->garage->serviceOnArrival($company, $vehicle->fresh(['model', 'city']));
+            if (config('transoria.shipment.auto_refuel_on_arrival', true)) {
+                $result = $this->garage->refuelOnArrival($company, $vehicle->fresh(['model', 'city']));
                 $serviceCost = (int) $result['cost'];
                 $vehicle = $result['vehicle'];
             }

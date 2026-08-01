@@ -75,21 +75,31 @@ async function refuel(v: Vehicle) {
   } catch (e) { toast.error(apiError(e)) } finally { working.value = null }
 }
 
-const servicingAll = ref(false)
-const serviceEstimate = ref<{ count: number; total: number }>({ count: 0, total: 0 })
+const busyUpkeep = ref<'service' | 'fuel' | null>(null)
+const upkeepEst = ref<{ service: { count: number; total: number }; fuel: { count: number; total: number } }>(
+  { service: { count: 0, total: 0 }, fuel: { count: 0, total: 0 } },
+)
 async function loadEstimate() {
   try {
     const { data } = await api.get('/fleet/service-estimate')
-    serviceEstimate.value = data
+    upkeepEst.value = data
   } catch { /* estimate is best-effort */ }
 }
 async function serviceAll() {
-  servicingAll.value = true
+  busyUpkeep.value = 'service'
   try {
-    const { data } = await api.post('/fleet/full-service-all')
+    const { data } = await api.post('/fleet/service-all')
     toast.success(data.message)
     await load(); game.refreshDashboard().catch(() => {})
-  } catch (e) { toast.error(apiError(e)) } finally { servicingAll.value = false }
+  } catch (e) { toast.error(apiError(e)) } finally { busyUpkeep.value = null }
+}
+async function fuelAll() {
+  busyUpkeep.value = 'fuel'
+  try {
+    const { data } = await api.post('/fleet/refuel-all')
+    toast.success(data.message)
+    await load(); game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)) } finally { busyUpkeep.value = null }
 }
 
 async function fullService(v: Vehicle) {
@@ -165,11 +175,18 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
         <h1 class="text-2xl font-bold">Fleet &amp; Dealership</h1>
         <p class="text-slate-400 text-sm">Trucks, trailers, fuel and multi-modal craft — everything that hauls.</p>
       </div>
-      <button class="btn-primary !py-1.5" :disabled="servicingAll || serviceEstimate.count === 0" @click="serviceAll">
-        <template v-if="servicingAll">Servicing…</template>
-        <template v-else-if="serviceEstimate.count > 0">⚡ Service &amp; Fuel All · {{ credits(serviceEstimate.total) }}</template>
-        <template v-else>⚡ Service &amp; Fuel All</template>
-      </button>
+      <div class="flex gap-2">
+        <button class="btn-ghost !py-1.5" :disabled="busyUpkeep !== null || upkeepEst.service.count === 0" @click="serviceAll">
+          <template v-if="busyUpkeep === 'service'">Servicing…</template>
+          <template v-else-if="upkeepEst.service.count > 0">🔧 Service All · {{ credits(upkeepEst.service.total) }}</template>
+          <template v-else>🔧 Service All</template>
+        </button>
+        <button class="btn-primary !py-1.5" :disabled="busyUpkeep !== null || upkeepEst.fuel.count === 0" @click="fuelAll">
+          <template v-if="busyUpkeep === 'fuel'">Fuelling…</template>
+          <template v-else-if="upkeepEst.fuel.count > 0">⛽ Fuel All · {{ credits(upkeepEst.fuel.total) }}</template>
+          <template v-else>⛽ Fuel All</template>
+        </button>
+      </div>
       <div class="flex flex-wrap gap-2 p-1 rounded-xl bg-ink-900/70">
         <button class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition"
           :class="tab === 'fleet' ? 'bg-brand text-ink-950' : 'text-slate-400'" @click="tab = 'fleet'">

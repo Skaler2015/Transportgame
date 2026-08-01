@@ -103,9 +103,9 @@ return [
         'tire_loss_per_1000km' => 9.0,
         'fatigue_gain_per_trip' => 12,
         'xp_per_shipment' => 40,
-        // Auto full-service & refuel the truck the moment a run ends, so upkeep
-        // is charged as a small per-trip line item instead of a lump sum later.
-        'auto_service_on_arrival' => true,
+        // Auto-refuel (fuel only) the truck the moment a run ends, so the tank
+        // is ready for the next dispatch. Servicing stays a manual choice.
+        'auto_refuel_on_arrival' => true,
     ],
 
     // Research tree. Each node: cost in research points, prerequisites, and the

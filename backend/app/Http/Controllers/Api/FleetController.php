@@ -22,27 +22,43 @@ class FleetController extends Controller
         private readonly GarageService $garage,
     ) {}
 
-    /** What "Service & Fuel All" would cost right now (dry run, no charge). */
+    /** Dry-run cost of "Service All" and "Fuel All" over the idle fleet. */
     public function serviceEstimate(Request $request)
     {
         $company = $this->company($request);
 
-        return response()->json($this->garage->estimateFullServiceAll($company));
+        return response()->json($this->garage->estimateUpkeepAll($company));
     }
 
-    /** One click: full-service + refuel every idle vehicle. */
-    public function fullServiceAll(Request $request)
+    /** One click: service (repair + tyres + oil + battery) every idle vehicle. */
+    public function serviceAll(Request $request)
     {
         $company = $this->company($request);
-        $result = $this->garage->fullServiceAll($company);
+        $result = $this->garage->serviceAll($company);
 
         if ($result['serviced'] === 0) {
             return response()->json(['message' => 'No idle vehicle needed servicing.']);
         }
 
         return response()->json([
-            'message' => "Serviced & fuelled {$result['serviced']} vehicle(s).",
+            'message' => "Serviced {$result['serviced']} vehicle(s).",
             'serviced' => $result['serviced'],
+        ]);
+    }
+
+    /** One click: refuel every idle vehicle to a full tank. */
+    public function refuelAll(Request $request)
+    {
+        $company = $this->company($request);
+        $result = $this->garage->refuelAll($company);
+
+        if ($result['fuelled'] === 0) {
+            return response()->json(['message' => 'No idle vehicle needed fuel.']);
+        }
+
+        return response()->json([
+            'message' => "Refuelled {$result['fuelled']} vehicle(s).",
+            'fuelled' => $result['fuelled'],
         ]);
     }
 
