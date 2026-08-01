@@ -103,8 +103,14 @@ async function logout() {
     <!-- Main column -->
     <div class="flex-1 flex flex-col min-w-0">
       <!-- Topbar -->
-      <header class="sticky top-0 z-30 border-b border-white/10 bg-ink-950/70 backdrop-blur-xl">
-        <div class="px-4 sm:px-6 h-16 flex items-center gap-4">
+      <header
+        class="sticky top-0 z-30 border-b border-white/10 bg-ink-950/70 backdrop-blur-xl"
+        style="padding-top: env(safe-area-inset-top)"
+      >
+        <div
+          class="px-4 sm:px-6 h-16 flex items-center gap-4"
+          style="padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right))"
+        >
           <!-- Mobile menu button (hidden on lg where the sidebar shows) -->
           <button
             class="lg:hidden btn-ghost !px-3 !py-2 text-lg leading-none"
@@ -157,7 +163,10 @@ async function logout() {
         </div>
       </header>
 
-      <main class="flex-1 p-4 sm:p-6 max-w-[1500px] w-full mx-auto">
+      <main
+        class="flex-1 p-4 sm:p-6 max-w-[1500px] w-full mx-auto"
+        style="padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right))"
+      >
         <RouterView />
       </main>
     </div>
@@ -168,6 +177,7 @@ async function logout() {
         <div class="absolute inset-0 bg-ink-950/70 backdrop-blur-sm" />
         <aside
           class="absolute left-0 top-0 bottom-0 w-72 max-w-[80%] bg-ink-900 border-r border-white/10 flex flex-col animate-slide-up"
+          style="padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom)"
           @click.stop
         >
           <div class="px-5 py-5 flex items-center gap-3 border-b border-white/10">

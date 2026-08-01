@@ -15,3 +15,14 @@ auth.bootstrap().finally(() => {
   app.use(router)
   app.mount('#app')
 })
+
+// Register the service worker so the game is installable as a standalone app
+// and its shell opens instantly. Dev (Vite) is skipped — SW only ships in the
+// built SPA served from the same origin.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      /* installability is a progressive enhancement — ignore failures */
+    })
+  })
+}

@@ -3,6 +3,11 @@
         Options -MultiViews -Indexes
     </IfModule>
 
+    # Correct MIME type so the PWA manifest is recognised by browsers.
+    <IfModule mod_mime.c>
+        AddType application/manifest+json .webmanifest
+    </IfModule>
+
     RewriteEngine On
 
     # Handle Authorization Header
