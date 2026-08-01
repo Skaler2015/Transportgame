@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
@@ -50,10 +50,50 @@ async function hire() {
 const statusChip: Record<string, string> = {
   available: 'bg-gain/20 text-gain', driving: 'bg-brand/20 text-brand-soft', resting: 'bg-gold/20 text-gold',
 }
-function bar(v: number, invert = false) {
+// Colour a 0–100 stat (green good → red poor); pass invert for fatigue.
+function metricText(v: number, invert = false): string {
   const good = invert ? 100 - v : v
-  return good > 60 ? 'bg-gain' : good > 30 ? 'bg-gold' : 'bg-loss'
+  return good > 60 ? 'text-gain' : good > 30 ? 'text-gold' : 'text-loss'
 }
+
+// ---- Sortable table --------------------------------------------------------
+type SortKey = 'name' | 'status' | 'skill' | 'health' | 'morale' | 'fatigue' | 'rain' | 'eco'
+const sortField = ref<SortKey>('skill')
+const sortDir = ref<'asc' | 'desc'>('desc')
+function setSort(k: SortKey) {
+  if (sortField.value === k) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  else { sortField.value = k; sortDir.value = ['name', 'status'].includes(k) ? 'asc' : 'desc' }
+}
+function arrow(k: SortKey): string {
+  return sortField.value !== k ? '' : (sortDir.value === 'asc' ? ' ▲' : ' ▼')
+}
+function sortVal(d: Driver, k: SortKey): number | string {
+  switch (k) {
+    case 'name': return (d.name || '').toLowerCase()
+    case 'status': return d.status
+    case 'skill': return d.skill ?? 0
+    case 'health': return d.health ?? 100
+    case 'morale': return d.morale ?? 0
+    case 'fatigue': return d.fatigue ?? 0
+    case 'rain': return d.rain_skill ?? 0
+    default: return d.eco_skill ?? 0
+  }
+}
+const sortedDrivers = computed(() => {
+  const arr = [...drivers.value]
+  arr.sort((a, b) => {
+    const av = sortVal(a, sortField.value), bv = sortVal(b, sortField.value)
+    const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number)
+    return sortDir.value === 'asc' ? cmp : -cmp
+  })
+  return arr
+})
+
+const expandedId = ref<number | null>(null)
+function toggleExpand(id: number) {
+  expandedId.value = expandedId.value === id ? null : id
+}
+
 onMounted(() => load().catch((e) => toast.error(apiError(e))))
 </script>
 
@@ -67,64 +107,109 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
       <button class="btn-primary" :disabled="hiring" @click="hire">＋ Hire Driver ({{ credits(costs.hire) }})</button>
     </div>
 
-    <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-      <div v-for="d in drivers" :key="d.id" class="glass p-4">
-        <div class="flex items-center gap-3">
-          <div class="h-10 w-10 rounded-full bg-gradient-to-br from-ink-600 to-ink-700 flex items-center justify-center font-bold">
-            {{ d.name.charAt(0) }}
-          </div>
-          <div class="min-w-0 flex-1">
-            <p class="font-semibold text-sm truncate">{{ d.name }}</p>
-            <p class="text-[11px] text-slate-400">
-              <span class="text-brand-soft">{{ d.rank || 'Rookie' }}</span> · age {{ d.age ?? '—' }} · {{ num(d.shipments_done) }} runs
-            </p>
-          </div>
-          <span class="chip capitalize" :class="statusChip[d.status]">{{ d.status }}</span>
-        </div>
+    <div v-if="!drivers.length" class="glass p-8 text-center text-slate-400">No crew yet.</div>
 
-        <div class="mt-3 space-y-2">
-          <div v-for="stat in [
-            { label: 'Skill', val: d.skill, invert: false },
-            { label: 'Health', val: d.health ?? 100, invert: false },
-            { label: 'Morale', val: d.morale, invert: false },
-            { label: 'Fatigue', val: d.fatigue, invert: true },
-          ]" :key="stat.label">
-            <div class="flex justify-between text-[11px] mb-1"><span class="text-slate-400">{{ stat.label }}</span><span class="font-mono">{{ stat.val }}</span></div>
-            <div class="h-1.5 rounded-full bg-ink-700 overflow-hidden">
-              <div class="h-full" :class="bar(stat.val, stat.invert)" :style="{ width: stat.val + '%' }" />
+    <!-- Desktop: sortable table (md and up) -->
+    <div v-else class="hidden md:block glass !p-0 overflow-hidden">
+      <div class="overflow-x-auto">
+      <table class="w-full text-sm min-w-[820px] border-collapse">
+        <thead class="text-[10px] uppercase tracking-wider text-slate-400 select-none bg-ink-900/80 backdrop-blur sticky top-0 z-10">
+          <tr class="border-b border-white/10 [&>th]:cursor-pointer [&>th:hover]:text-brand-soft [&>th]:transition">
+            <th class="text-left px-3 py-3 font-semibold" @click="setSort('name')">Driver{{ arrow('name') }}</th>
+            <th class="text-left px-2" @click="setSort('status')">Status{{ arrow('status') }}</th>
+            <th class="text-right px-2" @click="setSort('skill')">Skill{{ arrow('skill') }}</th>
+            <th class="text-right px-2" @click="setSort('health')">Health{{ arrow('health') }}</th>
+            <th class="text-right px-2" @click="setSort('morale')">Morale{{ arrow('morale') }}</th>
+            <th class="text-right px-2" @click="setSort('fatigue')">Fatigue{{ arrow('fatigue') }}</th>
+            <th class="text-right px-2" @click="setSort('rain')">🌧{{ arrow('rain') }}</th>
+            <th class="text-right px-2" @click="setSort('eco')">⛽{{ arrow('eco') }}</th>
+            <th class="text-center px-2 !cursor-default">Licence</th>
+            <th class="text-right px-3 !cursor-default"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="d in sortedDrivers" :key="d.id">
+            <tr class="border-b border-white/5 transition hover:bg-brand/[0.06] odd:bg-white/[0.015] cursor-pointer"
+              :class="!d.is_licensed ? 'bg-loss/5' : ''" @click="toggleExpand(d.id)">
+              <td class="px-3 py-2.5">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div class="h-8 w-8 rounded-full bg-gradient-to-br from-ink-600 to-ink-700 flex items-center justify-center font-bold text-xs shrink-0">{{ d.name.charAt(0) }}</div>
+                  <div class="min-w-0">
+                    <p class="font-semibold truncate">{{ d.name }}</p>
+                    <p class="text-[10px] text-slate-500 truncate"><span class="text-brand-soft">{{ d.rank || 'Rookie' }}</span> · age {{ d.age ?? '—' }} · {{ num(d.shipments_done) }} runs</p>
+                  </div>
+                </div>
+              </td>
+              <td class="px-2"><span class="chip capitalize text-[10px]" :class="statusChip[d.status]">{{ d.status }}</span></td>
+              <td class="px-2 text-right font-mono" :class="metricText(d.skill)">{{ d.skill }}</td>
+              <td class="px-2 text-right font-mono" :class="metricText(d.health ?? 100)">{{ d.health ?? 100 }}</td>
+              <td class="px-2 text-right font-mono" :class="metricText(d.morale)">{{ d.morale }}</td>
+              <td class="px-2 text-right font-mono" :class="metricText(d.fatigue, true)">{{ d.fatigue }}</td>
+              <td class="px-2 text-right font-mono text-slate-300">{{ d.rain_skill ?? 0 }}</td>
+              <td class="px-2 text-right font-mono text-slate-300">{{ d.eco_skill ?? 0 }}</td>
+              <td class="px-2 text-center whitespace-nowrap">
+                <span :title="d.is_licensed ? 'Licensed' : 'Licence expired'">{{ d.is_licensed ? '📋' : '⚠️' }}</span>
+                <span v-if="d.hazmat_licence" title="Hazmat">☣</span>
+              </td>
+              <td class="px-3 py-2 text-right whitespace-nowrap">
+                <button class="btn-ghost !py-1 !px-2 text-[11px]" @click.stop="toggleExpand(d.id)">{{ expandedId === d.id ? '×' : 'Manage' }}</button>
+              </td>
+            </tr>
+            <!-- Actions drawer -->
+            <tr v-if="expandedId === d.id" class="bg-ink-900/50 border-b border-white/5">
+              <td colspan="10" class="px-3 py-3">
+                <div class="flex flex-wrap items-center gap-2">
+                  <button class="btn-ghost !py-1.5 !px-3 text-[11px]" :disabled="working === d.id" @click="action(d, 'train')" title="+ skill & specialties">🎓 Train · {{ credits(costs.train) }}</button>
+                  <button class="btn-ghost !py-1.5 !px-3 text-[11px]" :class="!d.is_licensed && 'ring-1 ring-loss/50'" :disabled="working === d.id" @click="action(d, 'licence')" :title="`Renew for ${costs.licence_days} days`">📋 Licence · {{ credits(costs.licence) }}</button>
+                  <button class="btn-ghost !py-1.5 !px-3 text-[11px]" :disabled="working === d.id || d.status === 'driving'" @click="action(d, 'vacation')" title="Rest: restore health & fatigue">🏖 Rest · {{ credits(costs.vacation) }}</button>
+                  <span v-if="d.status === 'driving'" class="text-[11px] text-slate-500 ml-1">On a run — can rest once back.</span>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    <!-- Mobile: compact card list -->
+    <div v-if="drivers.length" class="md:hidden space-y-2">
+      <div v-for="d in sortedDrivers" :key="d.id" class="glass !p-3" :class="!d.is_licensed ? 'ring-1 ring-loss/40' : ''">
+        <div class="cursor-pointer" @click="toggleExpand(d.id)">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="h-8 w-8 rounded-full bg-gradient-to-br from-ink-600 to-ink-700 flex items-center justify-center font-bold text-xs shrink-0">{{ d.name.charAt(0) }}</div>
+              <div class="min-w-0">
+                <p class="font-semibold text-sm truncate">{{ d.name }}</p>
+                <p class="text-[10px] text-slate-500 truncate">{{ d.rank || 'Rookie' }} · age {{ d.age ?? '—' }} · {{ num(d.shipments_done) }} runs</p>
+              </div>
             </div>
+            <span class="chip capitalize text-[10px] shrink-0" :class="statusChip[d.status]">{{ d.status }}</span>
+          </div>
+          <div class="grid grid-cols-4 gap-1 mt-2 text-center text-[11px]">
+            <div><p class="stat-label">Skill</p><p class="font-mono" :class="metricText(d.skill)">{{ d.skill }}</p></div>
+            <div><p class="stat-label">Health</p><p class="font-mono" :class="metricText(d.health ?? 100)">{{ d.health ?? 100 }}</p></div>
+            <div><p class="stat-label">Morale</p><p class="font-mono" :class="metricText(d.morale)">{{ d.morale }}</p></div>
+            <div><p class="stat-label">Fatigue</p><p class="font-mono" :class="metricText(d.fatigue, true)">{{ d.fatigue }}</p></div>
+          </div>
+          <div class="flex items-center gap-1.5 mt-2">
+            <span class="chip text-[9px]" :class="d.is_licensed ? 'bg-gain/20 text-gain' : 'bg-loss/20 text-loss'">{{ d.is_licensed ? '📋 Licensed' : '⚠ Expired' }}</span>
+            <span v-if="d.hazmat_licence" class="chip text-[9px] bg-loss/15 text-loss">☣ Hazmat</span>
+            <span class="text-[10px] text-slate-500 ml-auto">🌧{{ d.rain_skill ?? 0 }} · ⛽{{ d.eco_skill ?? 0 }}</span>
           </div>
         </div>
-
-        <div class="grid grid-cols-2 gap-2 mt-3 text-center text-[11px]">
-          <div><p class="stat-label">🌧 Rain</p><p class="font-mono">{{ d.rain_skill ?? 0 }}</p></div>
-          <div><p class="stat-label">⛽ Eco</p><p class="font-mono">{{ d.eco_skill ?? 0 }}</p></div>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-1.5 mt-3">
-          <span class="chip" :class="d.is_licensed ? 'bg-gain/20 text-gain' : 'bg-loss/20 text-loss'">
-            {{ d.is_licensed ? '📋 Licensed' : '⚠ Licence expired' }}
-          </span>
-          <span v-if="d.hazmat_licence" class="chip bg-loss/15 text-loss">☣ Hazmat</span>
-        </div>
-
-        <!-- HR actions (price shown under each) -->
-        <div class="grid grid-cols-3 gap-1.5 mt-3 pt-3 border-t border-white/5">
-          <button class="btn-ghost !py-1 !flex-col gap-0.5 leading-tight" :disabled="working === d.id" @click="action(d, 'train')" title="+ skill & specialties">
-            <span class="text-[10px]">🎓 Train</span>
-            <span class="text-[9px] font-mono text-slate-400">{{ credits(costs.train) }}</span>
+        <div v-if="expandedId === d.id" class="grid grid-cols-3 gap-1.5 mt-2 pt-2 border-t border-white/10">
+          <button class="btn-ghost !py-1 !flex-col gap-0.5 leading-tight" :disabled="working === d.id" @click="action(d, 'train')">
+            <span class="text-[10px]">🎓 Train</span><span class="text-[9px] font-mono text-slate-400">{{ credits(costs.train) }}</span>
           </button>
-          <button class="btn-ghost !py-1 !flex-col gap-0.5 leading-tight" :class="!d.is_licensed && 'ring-1 ring-loss/50'" :disabled="working === d.id" @click="action(d, 'licence')" :title="`Renew for ${costs.licence_days} days`">
-            <span class="text-[10px]">📋 Licence</span>
-            <span class="text-[9px] font-mono text-slate-400">{{ credits(costs.licence) }}</span>
+          <button class="btn-ghost !py-1 !flex-col gap-0.5 leading-tight" :class="!d.is_licensed && 'ring-1 ring-loss/50'" :disabled="working === d.id" @click="action(d, 'licence')">
+            <span class="text-[10px]">📋 Licence</span><span class="text-[9px] font-mono text-slate-400">{{ credits(costs.licence) }}</span>
           </button>
-          <button class="btn-ghost !py-1 !flex-col gap-0.5 leading-tight" :disabled="working === d.id || d.status === 'driving'" @click="action(d, 'vacation')" title="Rest: restore health & fatigue">
-            <span class="text-[10px]">🏖 Rest</span>
-            <span class="text-[9px] font-mono text-slate-400">{{ credits(costs.vacation) }}</span>
+          <button class="btn-ghost !py-1 !flex-col gap-0.5 leading-tight" :disabled="working === d.id || d.status === 'driving'" @click="action(d, 'vacation')">
+            <span class="text-[10px]">🏖 Rest</span><span class="text-[9px] font-mono text-slate-400">{{ credits(costs.vacation) }}</span>
           </button>
         </div>
       </div>
-      <div v-if="!drivers.length" class="glass p-8 text-center text-slate-400 col-span-full">No crew yet.</div>
     </div>
   </div>
 </template>
