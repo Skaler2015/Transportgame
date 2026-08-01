@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -34,6 +35,17 @@ class EnsureSchemaUpToDate
         return $next($request);
     }
 
+    /** Do the tables the latest release depends on actually exist? */
+    protected function criticalTablesPresent(): bool
+    {
+        try {
+            return Schema::hasTable('trailer_models') && Schema::hasTable('trailers');
+        } catch (\Throwable $e) {
+            // DB momentarily unreachable — don't trigger a migrate storm.
+            return true;
+        }
+    }
+
     protected function syncIfNeeded(): void
     {
         // Never interfere with the test suite (which manages its own schema).
@@ -48,8 +60,12 @@ class EnsureSchemaUpToDate
 
         $markerFile = storage_path('app/.deploy-schema');
 
-        // Fast path: already up to date. Avoids touching the lock on every hit.
-        if (@is_file($markerFile) && trim((string) @file_get_contents($markerFile)) === $target) {
+        // Fast path: marker current AND the critical tables actually exist.
+        // Guarding on real tables (not just the marker) heals a half-applied
+        // migration where the marker was written but a table is still missing.
+        if (@is_file($markerFile)
+            && trim((string) @file_get_contents($markerFile)) === $target
+            && $this->criticalTablesPresent()) {
             return;
         }
 
