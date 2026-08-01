@@ -436,47 +436,54 @@ onUnmounted(() => clearInterval(poll))
       </div>
     </div>
 
-    <!-- Filters -->
-    <div class="glass p-4 flex flex-wrap gap-3 items-end">
-      <div class="flex-1 min-w-[160px]">
-        <label class="stat-label">Origin</label>
-        <select v-model="filters.origin_city_id" class="input mt-1" @change="hqOnly = String(filters.origin_city_id) === String(hqCityId ?? ''); load()">
-          <option value="">Any city</option>
-          <option v-for="c in sortedCities" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
+    <!-- Filters — packed into a 2-col grid on mobile, unchanged flex row on
+         desktop via `sm:contents` (the wrappers dissolve at ≥sm). -->
+    <div class="glass p-3 sm:p-4 space-y-2.5 sm:space-y-0 sm:flex sm:flex-wrap sm:gap-3 sm:items-end">
+      <div class="grid grid-cols-2 gap-2 sm:contents">
+        <div class="sm:flex-1 sm:min-w-[160px]">
+          <label class="stat-label">Origin</label>
+          <select v-model="filters.origin_city_id" class="input mt-0.5 sm:mt-1" @change="hqOnly = String(filters.origin_city_id) === String(hqCityId ?? ''); load()">
+            <option value="">Any city</option>
+            <option v-for="c in sortedCities" :key="c.id" :value="c.id">{{ c.name }}</option>
+          </select>
+        </div>
+        <div class="sm:flex-1 sm:min-w-[160px]">
+          <label class="stat-label">Commodity</label>
+          <select v-model="filters.commodity_id" class="input mt-0.5 sm:mt-1" @change="load()">
+            <option value="">Any cargo</option>
+            <option v-for="k in game.commodities" :key="k.id" :value="k.id">{{ k.name }}</option>
+          </select>
+        </div>
+        <div class="col-span-2 flex items-end gap-2 sm:contents">
+          <div class="flex-1 sm:min-w-[140px]">
+            <label class="stat-label">Sort by</label>
+            <select v-model="dropdownSort" class="input mt-0.5 sm:mt-1" @change="applyDropdownSort">
+              <option value="eta">Soonest ETA</option>
+              <option value="value">Highest payout</option>
+              <option value="profit">Best profit</option>
+              <option value="diff">Easiest</option>
+            </select>
+          </div>
+          <button class="btn-ghost shrink-0" @click="load()">↻ Refresh</button>
+        </div>
       </div>
-      <div class="flex-1 min-w-[160px]">
-        <label class="stat-label">Commodity</label>
-        <select v-model="filters.commodity_id" class="input mt-1" @change="load()">
-          <option value="">Any cargo</option>
-          <option v-for="k in game.commodities" :key="k.id" :value="k.id">{{ k.name }}</option>
-        </select>
+      <div class="flex flex-wrap gap-x-4 gap-y-1.5 sm:contents">
+        <label v-if="hqCityId" class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none sm:ml-auto"
+          title="Only jobs leaving your HQ — where your new trucks are parked.">
+          <input type="checkbox" v-model="hqOnly" class="accent-brand h-4 w-4" @change="toggleHq" />
+          🏭 From my HQ
+        </label>
+        <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none"
+          :class="hqCityId ? '' : 'sm:ml-auto'"
+          title="Jobs starting in a city where one of your trucks is parked — or heading right now — so it never runs back empty.">
+          <input type="checkbox" v-model="backhaulOnly" class="accent-brand h-4 w-4" @change="load()" />
+          🚚 Backhaul from my trucks
+        </label>
+        <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+          <input type="checkbox" v-model="haulableOnly" class="accent-brand h-4 w-4" @change="load()" />
+          Only what my fleet can haul
+        </label>
       </div>
-      <div class="min-w-[140px]">
-        <label class="stat-label">Sort by</label>
-        <select v-model="dropdownSort" class="input mt-1" @change="applyDropdownSort">
-          <option value="eta">Soonest ETA</option>
-          <option value="value">Highest payout</option>
-          <option value="profit">Best profit</option>
-          <option value="diff">Easiest</option>
-        </select>
-      </div>
-      <button class="btn-ghost" @click="load()">↻ Refresh</button>
-      <label v-if="hqCityId" class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none ml-auto"
-        title="Only jobs leaving your HQ — where your new trucks are parked.">
-        <input type="checkbox" v-model="hqOnly" class="accent-brand h-4 w-4" @change="toggleHq" />
-        🏭 From my HQ
-      </label>
-      <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none"
-        :class="hqCityId ? '' : 'ml-auto'"
-        title="Jobs starting in a city where one of your trucks is parked — or heading right now — so it never runs back empty.">
-        <input type="checkbox" v-model="backhaulOnly" class="accent-brand h-4 w-4" @change="load()" />
-        🚚 Backhaul from my trucks
-      </label>
-      <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
-        <input type="checkbox" v-model="haulableOnly" class="accent-brand h-4 w-4" @change="load()" />
-        Only what my fleet can haul
-      </label>
     </div>
 
     <!-- Mobile alert: a free vehicle needs service. Tap → jump to Free Vehicles. -->
