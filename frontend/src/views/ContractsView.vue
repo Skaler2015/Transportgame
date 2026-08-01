@@ -408,18 +408,18 @@ onUnmounted(() => clearInterval(poll))
    </div>
 
    <!-- Live fleet side panel -->
-   <aside class="lg:w-72 shrink-0 space-y-4 lg:sticky lg:top-20">
+   <aside class="lg:w-80 shrink-0 space-y-4 lg:sticky lg:top-20">
      <!-- On the road: route + time left, soonest first -->
      <div class="glass p-4">
        <h3 class="font-semibold text-sm mb-2">
          On the Road <span class="chip bg-brand/15 text-brand-soft ml-1">{{ onTheRoad.length }}</span>
        </h3>
        <div v-if="onTheRoad.length" class="divide-y divide-white/5">
-         <div v-for="s in onTheRoad" :key="s.id" class="flex items-center justify-between py-2 text-xs gap-2">
-           <span class="truncate">{{ s.contract?.origin?.name }} → {{ s.contract?.destination?.name }}</span>
-           <span class="font-mono shrink-0" :class="etaLeft(s) === 'arriving…' ? 'text-gain' : 'text-brand-soft'">
-             ⏱ {{ etaLeft(s) }}
-           </span>
+         <div v-for="s in onTheRoad" :key="s.id" class="py-2">
+           <p class="text-xs font-medium">{{ s.contract?.origin?.name }} → {{ s.contract?.destination?.name }}</p>
+           <p class="font-mono text-[11px] mt-0.5" :class="etaLeft(s) === 'arriving…' ? 'text-gain' : 'text-brand-soft'">
+             ⏱ {{ etaLeft(s) }} left
+           </p>
          </div>
        </div>
        <p v-else class="text-xs text-slate-500">Nothing en route right now.</p>
@@ -431,9 +431,9 @@ onUnmounted(() => clearInterval(poll))
          Free Vehicles <span class="chip bg-gain/15 text-gain ml-1">{{ freeVehicles.length }}</span>
        </h3>
        <div v-if="freeVehicles.length" class="divide-y divide-white/5">
-         <div v-for="v in freeVehicles" :key="v.id" class="flex items-center justify-between py-2 text-xs gap-2">
-           <span class="truncate">{{ v.nickname || v.model?.name }}</span>
-           <span class="text-slate-400 shrink-0 truncate">📍 {{ v.city?.name || '—' }}</span>
+         <div v-for="v in freeVehicles" :key="v.id" class="py-2">
+           <p class="text-xs font-medium">{{ v.nickname || v.model?.name }}</p>
+           <p class="text-[11px] text-slate-400 mt-0.5">📍 {{ v.city?.name || '—' }}</p>
          </div>
        </div>
        <p v-else class="text-xs text-slate-500">All trucks are out on the road.</p>
