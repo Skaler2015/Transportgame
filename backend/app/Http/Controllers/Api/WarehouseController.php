@@ -32,9 +32,15 @@ class WarehouseController extends Controller
                 'id' => $w->id,
                 'name' => $w->name,
                 'tier' => $w->tier,
-                'capacity' => $w->capacity,
+                'capacity' => $w->effectiveCapacity(),
+                'base_capacity' => $w->capacity,
                 'used' => $w->usedCapacity(),
                 'upkeep' => (int) $w->upkeep,
+                'cold_storage' => (bool) $w->cold_storage,
+                'hazmat_certified' => (bool) $w->hazmat_certified,
+                'automated' => (bool) $w->automated,
+                'staff_level' => (int) $w->staff_level,
+                'security_level' => (int) $w->security_level,
                 'city' => ['id' => $w->city?->id, 'name' => $w->city?->name],
                 'inventory' => $w->inventory->map(function ($row) use ($w) {
                     $local = $this->economy->latestPrice($w->city_id, $row->commodity);
@@ -51,9 +57,24 @@ class WarehouseController extends Controller
             ];
         });
 
+        $cfg = config('transoria.warehouse');
+
         return response()->json([
             'data' => $data,
-            'build_cost' => (int) config('transoria.warehouse.build_cost'),
+            'build_cost' => (int) $cfg['build_cost'],
+            'upgrade_costs' => [
+                'expand' => (int) $cfg['expand_cost'],
+                'cold' => (int) $cfg['cold_cost'],
+                'hazmat' => (int) $cfg['hazmat_cost'],
+                'automation' => (int) $cfg['automation_cost'],
+                'staff' => (int) $cfg['staff_cost'],
+                'security' => (int) $cfg['security_cost'],
+            ],
+            'max' => [
+                'tier' => (int) $cfg['max_tier'],
+                'staff' => (int) $cfg['max_staff_level'],
+                'security' => (int) $cfg['max_security_level'],
+            ],
         ]);
     }
 
@@ -72,6 +93,23 @@ class WarehouseController extends Controller
         }
 
         return response()->json(['message' => 'Warehouse built.', 'id' => $w->id], 201);
+    }
+
+    /** Upgrade a warehouse: expand | cold | hazmat | automation | staff | security. */
+    public function upgrade(Request $request, Warehouse $warehouse)
+    {
+        $company = $this->company($request);
+        $data = $request->validate([
+            'type' => ['required', 'in:expand,cold,hazmat,automation,staff,security'],
+        ]);
+
+        try {
+            $result = $this->warehouses->upgrade($company, $warehouse, $data['type']);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['message' => $result['message']]);
     }
 
     public function buy(Request $request, Warehouse $warehouse)

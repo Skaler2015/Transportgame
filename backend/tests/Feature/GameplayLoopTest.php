@@ -371,6 +371,35 @@ class GameplayLoopTest extends TestCase
         $this->assertSame(Contract::STATUS_IN_PROGRESS, $contract->fresh()->status);
     }
 
+    public function test_warehouse_upgrades_expand_capacity_and_unlock_storage(): void
+    {
+        $user = \App\Models\User::factory()->create();
+        $company = app(CompanyService::class)->found($user, 'Depot Co');
+        $company->update(['cash' => 5_000_000_00]);
+
+        $city = \App\Models\City::where('country', 'IN')->first();
+        $wh = app(\App\Services\WarehouseService::class);
+        $warehouse = $wh->build($company->fresh(), $city, 'Test Depot');
+
+        $baseCap = $warehouse->effectiveCapacity();
+
+        // Staff raises effective capacity.
+        $wh->upgrade($company->fresh(), $warehouse->fresh(), 'staff');
+        $this->assertGreaterThan($baseCap, $warehouse->fresh()->effectiveCapacity());
+
+        // Expanding raises the tier.
+        $wh->upgrade($company->fresh(), $warehouse->fresh(), 'expand');
+        $this->assertSame(2, (int) $warehouse->fresh()->tier);
+
+        // Cold storage unlocks perishables.
+        $perishable = \App\Models\Commodity::where('is_perishable', true)->first();
+        if ($perishable) {
+            $this->assertFalse($warehouse->fresh()->canStore($perishable));
+            $wh->upgrade($company->fresh(), $warehouse->fresh(), 'cold');
+            $this->assertTrue($warehouse->fresh()->canStore($perishable));
+        }
+    }
+
     public function test_driver_hr_actions_train_renew_and_rest(): void
     {
         $user = User::factory()->create();

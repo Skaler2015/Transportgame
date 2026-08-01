@@ -14,7 +14,7 @@ return [
     // deploy the app notices the stored marker no longer matches and runs
     // `migrate --force` + `transoria:worldsync` once, so shared hosts that
     // never run the CLI still stay fully migrated. See EnsureSchemaUpToDate.
-    'schema_version' => '2026.08.06-driver-careers',
+    'schema_version' => '2026.08.07-warehouse-ops',
 
     // In-game currency label.
     'currency' => ['code' => 'CR', 'symbol' => '₡', 'name' => 'Credits'],
@@ -172,6 +172,30 @@ return [
         'base_capacity' => 5000,      // units at tier 1
         'buy_spread' => 0.03,         // you buy 3% above local price
         'sell_spread' => 0.03,        // you sell 3% below local price
+
+        // Expansion (tier) — bigger footprint, higher upkeep.
+        'expand_cost' => 100_000_00,  // × current tier
+        'capacity_per_tier' => 5000,
+        'upkeep_per_tier' => 300_00,
+        'max_tier' => 6,
+
+        // One-off facilities.
+        'cold_cost' => 80_000_00,     // cold storage → store perishables
+        'hazmat_cost' => 90_000_00,   // hazmat bay → store hazardous goods
+        'automation_cost' => 150_000_00, // tighter trade spreads
+
+        // Levelled facilities (workers/forklifts, CCTV/security).
+        'staff_cost' => 60_000_00,    // × next level
+        'security_cost' => 50_000_00, // × next level
+        'max_staff_level' => 3,
+        'max_security_level' => 3,
+
+        // Effects.
+        'automation_spread_cut' => 0.010, // −1% each side
+        'staff_spread_cut' => 0.004,      // −0.4% each side per staff level
+        'staff_capacity_bonus' => 0.15,   // +15% effective capacity per staff level
+        'security_capacity_bonus' => 0.08, // +8% effective capacity per security level
+        'min_spread' => 0.005,
     ],
 
     // Vehicle repair, service & upgrades.

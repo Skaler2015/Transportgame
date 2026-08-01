@@ -10,7 +10,10 @@ const toast = useToastStore()
 
 const warehouses = ref<any[]>([])
 const buildCost = ref(0)
+const upgradeCosts = ref<Record<string, number>>({})
+const maxLevels = ref<{ tier: number; staff: number; security: number }>({ tier: 6, staff: 3, security: 3 })
 const busy = ref(false)
+const upgrading = ref<number | null>(null)
 const buildForm = ref({ city_id: '', name: '' })
 const trade = ref<Record<number, { commodity_id: string; units: number }>>({})
 
@@ -20,7 +23,19 @@ async function load() {
   const { data } = await api.get('/warehouses')
   warehouses.value = data.data
   buildCost.value = data.build_cost
+  upgradeCosts.value = data.upgrade_costs ?? {}
+  maxLevels.value = data.max ?? maxLevels.value
   for (const w of warehouses.value) if (!trade.value[w.id]) trade.value[w.id] = { commodity_id: '', units: 50 }
+}
+
+async function upgrade(w: any, type: string) {
+  upgrading.value = w.id
+  try {
+    const { data } = await api.post(`/warehouses/${w.id}/upgrade`, { type })
+    toast.success(data.message)
+    await load()
+    game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)) } finally { upgrading.value = null }
 }
 
 async function build() {
@@ -88,6 +103,40 @@ onMounted(async () => { await game.loadReference().catch(() => {}); await load()
             <p class="font-mono text-sm">{{ num(w.used) }} / {{ num(w.capacity) }}</p>
           </div>
         </div>
+
+        <!-- Facilities -->
+        <div class="flex flex-wrap gap-1.5 mt-3">
+          <span class="chip" :class="w.cold_storage ? 'bg-cyan-500/20 text-cyan-300' : 'bg-white/5 text-slate-500'">❄️ Cold</span>
+          <span class="chip" :class="w.hazmat_certified ? 'bg-loss/20 text-loss' : 'bg-white/5 text-slate-500'">☣ Hazmat</span>
+          <span class="chip" :class="w.automated ? 'bg-brand/20 text-brand-soft' : 'bg-white/5 text-slate-500'">🤖 Auto</span>
+          <span class="chip bg-white/5 text-slate-300">👷 Staff {{ w.staff_level }}/{{ maxLevels.staff }}</span>
+          <span class="chip bg-white/5 text-slate-300">📹 Security {{ w.security_level }}/{{ maxLevels.security }}</span>
+        </div>
+
+        <!-- Upgrades -->
+        <details class="mt-2 group">
+          <summary class="text-[11px] text-brand-soft cursor-pointer select-none">⚙ Upgrade facility…</summary>
+          <div class="grid grid-cols-2 gap-1.5 mt-2">
+            <button class="btn-ghost !py-1 text-[10px]" :disabled="upgrading === w.id || w.tier >= maxLevels.tier" @click="upgrade(w, 'expand')">
+              ⤢ Expand · {{ credits(upgradeCosts.expand * w.tier) }}
+            </button>
+            <button class="btn-ghost !py-1 text-[10px]" :disabled="upgrading === w.id || w.cold_storage" @click="upgrade(w, 'cold')">
+              ❄️ Cold · {{ credits(upgradeCosts.cold) }}
+            </button>
+            <button class="btn-ghost !py-1 text-[10px]" :disabled="upgrading === w.id || w.hazmat_certified" @click="upgrade(w, 'hazmat')">
+              ☣ Hazmat · {{ credits(upgradeCosts.hazmat) }}
+            </button>
+            <button class="btn-ghost !py-1 text-[10px]" :disabled="upgrading === w.id || w.automated" @click="upgrade(w, 'automation')">
+              🤖 Auto · {{ credits(upgradeCosts.automation) }}
+            </button>
+            <button class="btn-ghost !py-1 text-[10px]" :disabled="upgrading === w.id || w.staff_level >= maxLevels.staff" @click="upgrade(w, 'staff')">
+              👷 Staff · {{ credits(upgradeCosts.staff * (w.staff_level + 1)) }}
+            </button>
+            <button class="btn-ghost !py-1 text-[10px]" :disabled="upgrading === w.id || w.security_level >= maxLevels.security" @click="upgrade(w, 'security')">
+              📹 Security · {{ credits(upgradeCosts.security * (w.security_level + 1)) }}
+            </button>
+          </div>
+        </details>
 
         <!-- Inventory -->
         <div v-if="w.inventory.length" class="mt-3 space-y-1.5">

@@ -96,6 +96,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Warehouses & direct trading.
     Route::get('/warehouses', [WarehouseController::class, 'index']);
     Route::post('/warehouses', [WarehouseController::class, 'build']);
+    Route::post('/warehouses/{warehouse}/upgrade', [WarehouseController::class, 'upgrade']);
     Route::post('/warehouses/{warehouse}/buy', [WarehouseController::class, 'buy']);
     Route::post('/warehouses/{warehouse}/sell', [WarehouseController::class, 'sell']);
 
