@@ -82,6 +82,8 @@ function vehicleSelfHauls(v: Vehicle, c: Contract): boolean {
 function compatibleVehicles(c: Contract): Vehicle[] {
   return vehicles.value.filter((v) => {
     if (!v.available || !v.model) return false
+    // Only trucks parked at the origin city can start this job.
+    if (v.city?.id !== c.origin?.id) return false
     if (!modeOk(v, c)) return false
     return v.model.needs_trailer ? true : vehicleSelfHauls(v, c)
   })

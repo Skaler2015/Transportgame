@@ -155,6 +155,19 @@ const roadTotals = computed(() =>
   ),
 )
 
+// Contract table: expand-to-dispatch drawer + header sorting (server-side).
+const expandedContract = ref<number | null>(null)
+function toggleContract(id: number) {
+  expandedContract.value = expandedContract.value === id ? null : id
+}
+function setContractSort(k: string) {
+  filters.value.sort = k
+  load()
+}
+function sortMark(k: string): string {
+  return filters.value.sort === k ? ' ▾' : ''
+}
+
 // ---- compatibility (mirrors Operations) -----------------------------------
 function modeOk(v: Vehicle, c: Contract): boolean {
   const mode = v.model?.mode ?? 'road'
@@ -171,7 +184,10 @@ function vehicleSelfHauls(v: Vehicle, c: Contract): boolean {
   return m.capacity_weight >= (c.total_weight ?? 0) && m.capacity_volume >= (c.total_volume ?? 0)
 }
 function compatibleVehicles(c: Contract): Vehicle[] {
-  return vehicles.value.filter((v) => v.available && v.model && modeOk(v, c) && (v.model.needs_trailer ? true : vehicleSelfHauls(v, c)))
+  // A truck can only start this job if it's parked AT the origin city.
+  return vehicles.value.filter((v) => v.available && v.model
+    && v.city?.id === c.origin?.id
+    && modeOk(v, c) && (v.model.needs_trailer ? true : vehicleSelfHauls(v, c)))
 }
 function trailerCarries(t: Trailer, c: Contract): boolean {
   const m = t.model, com = c.commodity
@@ -354,95 +370,94 @@ onUnmounted(() => clearInterval(poll))
 
     <div v-if="loading" class="grid place-items-center h-64 text-slate-500">Loading market…</div>
 
-    <div v-else class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-      <div v-for="c in contracts" :key="c.id" class="glass glass-hover p-4 flex flex-col"
-        :class="c.at_fleet_city ? 'ring-1 ring-brand/50' : ''">
-        <div class="flex items-start justify-between gap-2">
-          <CommodityBadge :commodity="c.commodity" size="md" />
-          <div class="flex items-center gap-2">
-            <span v-if="c.at_fleet_city" class="chip bg-brand/20 text-brand-soft"
-              :title="c.fleet_arriving ? 'A truck of yours is en route to this city — line up its next load.' : 'A truck of yours is already here — pick it up without an empty run back.'">
-              🚚 {{ c.fleet_arriving ? 'Truck arriving' : 'Truck here' }}
-            </span>
-            <span v-if="c.is_rush" class="chip bg-loss/20 text-loss">RUSH</span>
-            <DifficultyStars :value="c.difficulty" />
-          </div>
-        </div>
-
-        <div class="mt-3 flex items-center gap-2 text-sm font-semibold">
-          <span>{{ c.origin?.name }}</span>
-          <span class="text-brand">→</span>
-          <span>{{ c.destination?.name }}</span>
-        </div>
-        <p class="text-[11px] text-slate-400">
-          {{ num(c.distance_km) }} km · {{ num(c.units) }} units · {{ num(c.total_weight ?? 0, 1) }} t
-          <span class="text-brand-soft">· ⏱ {{ etaText(c.distance_km) }}</span>
-        </p>
-
-        <!-- Estimated P&L: contract value − expenses = profit -->
-        <div class="mt-3 rounded-lg bg-ink-900/60 px-3 py-2.5 text-sm space-y-1">
-          <div class="flex items-center justify-between">
-            <span class="text-slate-300">Contract value</span>
-            <span class="font-mono text-gold font-semibold">{{ credits(c.payout) }}</span>
-          </div>
-          <div class="flex items-center justify-between text-[12px] text-slate-400">
-            <span>Fuel {{ costBreakdown(c).hasVehicle ? '(est.)' : '' }}</span>
-            <span class="font-mono">{{ costBreakdown(c).hasVehicle ? '−' + credits(costBreakdown(c).fuel) : 'pick a truck' }}</span>
-          </div>
-          <div class="flex items-center justify-between text-[12px] text-slate-400">
-            <span>Tolls</span>
-            <span class="font-mono">−{{ credits(costBreakdown(c).toll) }}</span>
-          </div>
-          <div class="flex items-center justify-between text-[12px] text-slate-400">
-            <span>Tax ({{ Math.round((c.destination?.tax_rate ?? 0) * 100) }}%)</span>
-            <span class="font-mono">−{{ credits(costBreakdown(c).tax) }}</span>
-          </div>
-          <div class="flex items-center justify-between pt-1.5 mt-1 border-t border-white/10">
-            <span class="font-semibold">Est. profit</span>
-            <span class="font-mono font-semibold" :class="costBreakdown(c).profit >= 0 ? 'text-gain' : 'text-loss'">
-              {{ credits(costBreakdown(c).profit) }}
-            </span>
-          </div>
-          <p class="text-[10px] text-slate-500 pt-0.5">Fails/late risk penalty: {{ credits(c.penalty) }}</p>
-        </div>
-
-        <!-- Inline dispatch: pick vehicle + (trailer) + driver, then GO -->
-        <div class="mt-3 space-y-1.5 pt-3 border-t border-white/5">
-          <select v-model="selection[c.id].vehicle_id" class="input !py-1.5 text-xs">
-            <option :value="null" disabled>Choose vehicle…</option>
-            <option v-for="v in compatibleVehicles(c)" :key="v.id" :value="v.id">
-              {{ v.nickname || v.model?.name }} · fuel {{ Math.round(v.fuel_pct ?? 100) }}%
-            </option>
-          </select>
-          <select v-if="needsTrailer(c)" v-model="selection[c.id].trailer_id" class="input !py-1.5 text-xs">
-            <option :value="null" disabled>Attach trailer…</option>
-            <option v-for="t in compatibleTrailers(c)" :key="t.id" :value="t.id">{{ t.model?.name }}</option>
-          </select>
-          <select v-model="selection[c.id].driver_id" class="input !py-1.5 text-xs">
-            <option :value="null" disabled>Choose driver…</option>
-            <option v-for="d in compatibleDrivers(c)" :key="d.id" :value="d.id">{{ d.name }} · skill {{ d.skill }}</option>
-          </select>
-        </div>
-
-        <div class="flex items-center justify-between mt-3">
-          <button class="text-[11px] text-slate-400 hover:text-slate-200" :disabled="accepting === c.id" @click="accept(c)">
-            {{ accepting === c.id ? '…' : 'Claim for later' }}
-          </button>
-          <button
-            class="btn-primary !py-1.5 !px-4"
-            :disabled="dispatching === c.id || !canDispatch(c)"
-            @click="dispatchNow(c)"
-          >
-            {{ dispatching === c.id ? '…' : 'GO →' }}
-          </button>
-        </div>
-        <p v-if="!compatibleVehicles(c).length" class="text-[10px] text-loss mt-1">No compatible idle vehicle.</p>
-        <p v-else-if="needsTrailer(c) && !compatibleTrailers(c).length" class="text-[10px] text-loss mt-1">Needs a matching trailer — buy one in Fleet.</p>
-        <p v-else-if="!compatibleDrivers(c).length" class="text-[10px] text-loss mt-1">No available driver — rest or hire crew.</p>
-      </div>
+    <!-- Compact, sortable contract table. Click a row's ⋯ to dispatch. -->
+    <div v-else-if="contracts.length" class="glass overflow-x-auto">
+      <table class="w-full text-sm min-w-[720px]">
+        <thead class="text-[11px] uppercase tracking-wide text-slate-400 border-b border-white/10 select-none">
+          <tr>
+            <th class="text-left px-3 py-2.5">Cargo · Route</th>
+            <th class="text-right px-2 cursor-pointer hover:text-slate-200" @click="setContractSort('distance_km')">Load{{ sortMark('distance_km') }}</th>
+            <th class="text-right px-2 cursor-pointer hover:text-slate-200" @click="setContractSort('payout')">Value{{ sortMark('payout') }}</th>
+            <th class="text-right px-2">Est. profit</th>
+            <th class="text-center px-2 cursor-pointer hover:text-slate-200" @click="setContractSort('difficulty')">Diff{{ sortMark('difficulty') }}</th>
+            <th class="text-right px-3">Dispatch</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="c in contracts" :key="c.id">
+            <tr class="border-b border-white/5 hover:bg-white/5 transition" :class="c.at_fleet_city ? 'bg-brand/5' : ''">
+              <td class="px-3 py-2">
+                <div class="flex items-center gap-2 min-w-0">
+                  <CommodityBadge :commodity="c.commodity" size="sm" />
+                  <div class="min-w-0">
+                    <p class="font-medium truncate">
+                      {{ c.origin?.name }} <span class="text-brand">→</span> {{ c.destination?.name }}
+                    </p>
+                    <p class="text-[10px] truncate">
+                      <span v-if="c.at_fleet_city" class="text-brand-soft font-semibold">🚚 {{ c.fleet_arriving ? 'Truck arriving' : 'Truck here' }} · </span>
+                      <span v-if="c.is_rush" class="text-loss font-semibold">RUSH · </span>
+                      <span class="text-slate-500">{{ c.commodity?.name }}</span>
+                    </p>
+                  </div>
+                </div>
+              </td>
+              <td class="px-2 text-right whitespace-nowrap text-[11px] text-slate-300">
+                {{ num(c.distance_km) }} km<br><span class="text-slate-500">{{ num(c.total_weight ?? 0, 1) }}t · ⏱{{ etaText(c.distance_km) }}</span>
+              </td>
+              <td class="px-2 text-right font-mono text-gold font-semibold">{{ credits(c.payout) }}</td>
+              <td class="px-2 text-right font-mono font-semibold" :class="costBreakdown(c).profit >= 0 ? 'text-gain' : 'text-loss'">
+                {{ credits(costBreakdown(c).profit) }}
+              </td>
+              <td class="px-2 text-center"><DifficultyStars :value="c.difficulty" /></td>
+              <td class="px-3 py-2 text-right whitespace-nowrap">
+                <button class="btn-primary !py-1 !px-3 text-[11px]" @click="toggleContract(c.id)">
+                  {{ expandedContract === c.id ? 'Close' : 'GO →' }}
+                </button>
+              </td>
+            </tr>
+            <!-- Dispatch drawer -->
+            <tr v-if="expandedContract === c.id" class="bg-ink-900/50 border-b border-white/5">
+              <td colspan="6" class="px-3 py-3">
+                <div class="grid md:grid-cols-2 gap-3">
+                  <!-- Cost breakdown -->
+                  <div class="rounded-lg bg-ink-900/60 px-3 py-2 text-[12px] space-y-1">
+                    <div class="flex justify-between"><span class="text-slate-400">Fuel {{ costBreakdown(c).hasVehicle ? '(est.)' : '' }}</span><span class="font-mono">{{ costBreakdown(c).hasVehicle ? '−' + credits(costBreakdown(c).fuel) : 'pick a truck' }}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">Tolls</span><span class="font-mono">−{{ credits(costBreakdown(c).toll) }}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">Tax ({{ Math.round((c.destination?.tax_rate ?? 0) * 100) }}%)</span><span class="font-mono">−{{ credits(costBreakdown(c).tax) }}</span></div>
+                    <div class="flex justify-between pt-1 border-t border-white/10"><span class="font-semibold">Est. profit</span><span class="font-mono font-semibold" :class="costBreakdown(c).profit >= 0 ? 'text-gain' : 'text-loss'">{{ credits(costBreakdown(c).profit) }}</span></div>
+                    <p class="text-[10px] text-slate-500">Fails/late penalty: {{ credits(c.penalty) }}</p>
+                  </div>
+                  <!-- Pick vehicle + (trailer) + driver, then GO -->
+                  <div class="space-y-1.5">
+                    <select v-model="selection[c.id].vehicle_id" class="input !py-1.5 text-xs">
+                      <option :value="null" disabled>Choose vehicle…</option>
+                      <option v-for="v in compatibleVehicles(c)" :key="v.id" :value="v.id">{{ v.nickname || v.model?.name }} · fuel {{ Math.round(v.fuel_pct ?? 100) }}%</option>
+                    </select>
+                    <select v-if="needsTrailer(c)" v-model="selection[c.id].trailer_id" class="input !py-1.5 text-xs">
+                      <option :value="null" disabled>Attach trailer…</option>
+                      <option v-for="t in compatibleTrailers(c)" :key="t.id" :value="t.id">{{ t.model?.name }}</option>
+                    </select>
+                    <select v-model="selection[c.id].driver_id" class="input !py-1.5 text-xs">
+                      <option :value="null" disabled>Choose driver…</option>
+                      <option v-for="d in compatibleDrivers(c)" :key="d.id" :value="d.id">{{ d.name }} · skill {{ d.skill }}</option>
+                    </select>
+                    <div class="flex items-center justify-between pt-1">
+                      <button class="text-[11px] text-slate-400 hover:text-slate-200" :disabled="accepting === c.id" @click="accept(c)">{{ accepting === c.id ? '…' : 'Claim for later' }}</button>
+                      <button class="btn-primary !py-1.5 !px-4" :disabled="dispatching === c.id || !canDispatch(c)" @click="dispatchNow(c)">{{ dispatching === c.id ? '…' : 'GO →' }}</button>
+                    </div>
+                    <p v-if="!compatibleVehicles(c).length" class="text-[10px] text-loss">No compatible idle vehicle.</p>
+                    <p v-else-if="needsTrailer(c) && !compatibleTrailers(c).length" class="text-[10px] text-loss">Needs a matching trailer — buy one in Fleet.</p>
+                    <p v-else-if="!compatibleDrivers(c).length" class="text-[10px] text-loss">No available driver — rest or hire crew.</p>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
     </div>
 
-    <div v-if="!loading && !contracts.length" class="glass p-10 text-center text-slate-400">
+    <div v-else class="glass p-10 text-center text-slate-400">
       <p v-if="haulableOnly">No open contracts fit an available truck right now.</p>
       <p v-else>No contracts match those filters. Try widening your search or advancing the world.</p>
       <p v-if="haulableOnly" class="text-xs text-slate-500 mt-2">

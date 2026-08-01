@@ -190,13 +190,53 @@ function needSummary(v: Vehicle): string {
   return [n.repair && 'repair', n.oil && 'oil', n.battery && 'battery', n.insurance && 'insurance', n.registration && 'registration']
     .filter(Boolean).join(' · ')
 }
-// Neediest trucks first — and among those, ones you can service NOW (not on the
-// road) float to the very top, so the list leads with actionable work.
-function sortKey(v: Vehicle): number {
-  const actionable = v.status !== 'en_route' && needSummary(v) !== ''
-  return needScore(v) + (actionable ? 1000 : 0)
+// ---- Sortable fleet table --------------------------------------------------
+type SortKey = 'name' | 'status' | 'location' | 'condition' | 'tire' | 'fuel' | 'oil' | 'battery' | 'need'
+const sortField = ref<SortKey>('need')
+const sortDir = ref<'asc' | 'desc'>('desc')
+function setSort(k: SortKey) {
+  if (sortField.value === k) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortField.value = k
+    sortDir.value = ['name', 'status', 'location'].includes(k) ? 'asc' : 'desc'
+  }
 }
-const sortedVehicles = computed(() => [...vehicles.value].sort((a, b) => sortKey(b) - sortKey(a)))
+function arrow(k: SortKey): string {
+  return sortField.value !== k ? '' : (sortDir.value === 'asc' ? ' ▲' : ' ▼')
+}
+function sortVal(v: Vehicle, k: SortKey): number | string {
+  switch (k) {
+    case 'name': return (v.nickname || v.model?.name || '').toLowerCase()
+    case 'status': return v.status
+    case 'location': return (v.city?.name || '').toLowerCase()
+    case 'condition': return v.condition ?? 0
+    case 'tire': return v.tire_wear ?? 0
+    case 'fuel': return v.fuel_pct ?? 100
+    case 'oil': return v.oil_level ?? 100
+    case 'battery': return v.battery ?? 100
+    default: return needScore(v)
+  }
+}
+const tableVehicles = computed(() => {
+  const arr = [...vehicles.value]
+  arr.sort((a, b) => {
+    const av = sortVal(a, sortField.value)
+    const bv = sortVal(b, sortField.value)
+    const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number)
+    return sortDir.value === 'asc' ? cmp : -cmp
+  })
+  return arr
+})
+// Colour a 0–100 metric (green healthy → red critical).
+function metricText(v: number): string {
+  return v > 60 ? 'text-gain' : v > 30 ? 'text-gold' : 'text-loss'
+}
+// Row expand-to-manage (all the per-vehicle actions live in the drawer).
+const expandedId = ref<number | null>(null)
+function toggleExpand(id: number) {
+  expandedId.value = expandedId.value === id ? null : id
+}
 
 onMounted(() => load().catch((e) => toast.error(apiError(e))))
 </script>
@@ -240,103 +280,77 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
       </div>
     </div>
 
-    <!-- Fleet -->
-    <div v-if="tab === 'fleet'" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-      <div v-for="v in sortedVehicles" :key="v.id" class="glass p-4"
-        :class="needScore(v) > 40 ? 'ring-1 ring-loss/40' : (needScore(v) > 15 ? 'ring-1 ring-gold/30' : '')">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span>{{ MODE_ICON[v.model?.mode ?? 'road'] }}</span>
-            <p class="font-semibold text-sm">{{ v.model?.name }}</p>
-          </div>
-          <span class="chip capitalize" :class="statusChip[v.status]">{{ v.status.replace('_', ' ') }}</span>
-        </div>
-        <p class="text-[11px] text-slate-400 mt-0.5">{{ v.nickname || v.model?.brand }} · {{ v.city?.name }} · {{ num(v.odometer) }} km</p>
-
-        <!-- What this vehicle needs, at a glance -->
-        <p v-if="needSummary(v)" class="mt-2 text-[11px] font-medium flex items-center gap-1 flex-wrap"
-          :class="needScore(v) > 40 ? 'text-loss' : 'text-gold'">
-          <span>🛠</span> Needs: {{ needSummary(v) }}
-          <span v-if="v.status === 'en_route'" class="text-slate-500 font-normal">· on the road, service when it arrives</span>
-        </p>
-
-        <div class="mt-3 space-y-2">
-          <div>
-            <div class="flex justify-between text-[11px] mb-1"><span class="text-slate-400">Condition</span><span class="font-mono">{{ num(v.condition) }}%</span></div>
-            <div class="h-1.5 rounded-full bg-ink-700 overflow-hidden"><div class="h-full" :class="barColor(v.condition)" :style="{ width: v.condition + '%' }" /></div>
-          </div>
-          <div>
-            <div class="flex justify-between text-[11px] mb-1"><span class="text-slate-400">Tire wear</span><span class="font-mono">{{ num(v.tire_wear) }}%</span></div>
-            <div class="h-1.5 rounded-full bg-ink-700 overflow-hidden"><div class="h-full" :class="barColor(100 - v.tire_wear)" :style="{ width: v.tire_wear + '%' }" /></div>
-          </div>
-          <div v-if="(v.fuel_capacity ?? 0) > 0">
-            <div class="flex justify-between text-[11px] mb-1">
-              <span class="text-slate-400">Fuel</span>
-              <span class="font-mono">{{ Math.round(v.fuel) }} / {{ Math.round(v.fuel_capacity ?? 0) }} L</span>
-            </div>
-            <div class="h-1.5 rounded-full bg-ink-700 overflow-hidden"><div class="h-full" :class="barColor(v.fuel_pct ?? 100)" :style="{ width: Math.min(100, v.fuel_pct ?? 100) + '%' }" /></div>
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <div class="flex justify-between text-[11px] mb-1"><span class="text-slate-400">Oil</span><span class="font-mono">{{ num(v.oil_level ?? 100) }}%</span></div>
-              <div class="h-1.5 rounded-full bg-ink-700 overflow-hidden"><div class="h-full" :class="barColor(v.oil_level ?? 100)" :style="{ width: (v.oil_level ?? 100) + '%' }" /></div>
-            </div>
-            <div>
-              <div class="flex justify-between text-[11px] mb-1"><span class="text-slate-400">Battery</span><span class="font-mono">{{ num(v.battery ?? 100) }}%</span></div>
-              <div class="h-1.5 rounded-full bg-ink-700 overflow-hidden"><div class="h-full" :class="barColor(v.battery ?? 100)" :style="{ width: (v.battery ?? 100) + '%' }" /></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Papers -->
-        <div class="flex items-center gap-2 mt-3 text-[11px]">
-          <span class="chip" :class="v.is_insured ? 'bg-gain/20 text-gain' : 'bg-loss/20 text-loss'">
-            {{ v.is_insured ? '🛡 Insured' : '⚠ Uninsured' }}
-          </span>
-          <span class="chip" :class="v.is_registered ? 'bg-gain/20 text-gain' : 'bg-loss/20 text-loss'">
-            {{ v.is_registered ? '📋 Registered' : '⚠ Unregistered' }}
-          </span>
-        </div>
-
-        <div class="grid grid-cols-3 gap-2 mt-3 text-center text-[11px]">
-          <div><p class="stat-label">Cap</p><p class="font-mono">{{ num((v as any).effective_capacity_weight ?? v.model?.capacity_weight ?? 0, 1) }}t</p></div>
-          <div><p class="stat-label">Speed</p><p class="font-mono">{{ v.model?.top_speed }}</p></div>
-          <div><p class="stat-label">Rig</p><p class="font-mono">{{ v.model?.needs_trailer ? 'tractor' : 'rigid' }}</p></div>
-        </div>
-
-        <!-- Service, fuel & upgrades -->
-        <div class="mt-3 pt-3 border-t border-white/5">
-          <div class="flex items-center justify-between mb-2 gap-2">
-            <span class="stat-label">Upgrades ({{ (v as any).upgrade_slots_used ?? 0 }}/{{ v.model?.upgrade_slots ?? 0 }})</span>
-            <button class="btn-primary !py-1 !px-3 text-[11px]" :disabled="working === v.id || v.status === 'en_route'" @click="fullService(v)">
-              ⚡ Full Service
-            </button>
-          </div>
-          <div class="flex gap-1.5 mb-2">
-            <button v-if="(v.fuel_capacity ?? 0) > 0" class="btn-ghost !py-1 !px-2 text-[11px] flex-1" :disabled="working === v.id || v.status === 'en_route'" @click="refuel(v)">⛽ Refuel</button>
-            <button class="btn-ghost !py-1 !px-2 text-[11px] flex-1" :class="needs(v).repair && 'ring-1 ring-gold/60'" :disabled="working === v.id || v.status === 'en_route'" @click="repair(v)">🔧 Repair</button>
-          </div>
-          <!-- Service centre: oil & other services, each flagged when due -->
-          <div class="grid grid-cols-4 gap-1.5 mb-2">
-            <button class="btn-ghost !py-1 text-[10px]" :class="needs(v).oil && 'ring-1 ring-gold/60'" :disabled="working === v.id || v.status === 'en_route'" @click="service(v, 'oil')">🛢 Oil</button>
-            <button class="btn-ghost !py-1 text-[10px]" :class="needs(v).battery && 'ring-1 ring-gold/60'" :disabled="working === v.id || v.status === 'en_route'" @click="service(v, 'battery')">🔋 Batt</button>
-            <button class="btn-ghost !py-1 text-[10px]" :class="!v.is_insured && 'ring-1 ring-loss/50'" :disabled="working === v.id" @click="service(v, 'insurance')">🛡 Insure</button>
-            <button class="btn-ghost !py-1 text-[10px]" :class="!v.is_registered && 'ring-1 ring-loss/50'" :disabled="working === v.id" @click="service(v, 'registration')">📋 Reg</button>
-          </div>
-          <div class="grid grid-cols-3 gap-1.5">
-            <button class="btn-ghost !py-1 text-[11px] flex-col" :disabled="working === v.id" @click="upgrade(v, 'engine')">
-              ⚙ Engine <span class="text-brand-soft">L{{ (v as any).engine_level ?? 0 }}</span>
-            </button>
-            <button class="btn-ghost !py-1 text-[11px]" :disabled="working === v.id" @click="upgrade(v, 'tires')">
-              ◍ Tyres <span class="text-brand-soft">L{{ (v as any).tires_level ?? 0 }}</span>
-            </button>
-            <button class="btn-ghost !py-1 text-[11px]" :disabled="working === v.id" @click="upgrade(v, 'trailer')">
-              ▤ Rig <span class="text-brand-soft">L{{ (v as any).trailer_level ?? 0 }}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-      <div v-if="!vehicles.length" class="glass p-8 text-center text-slate-400 col-span-full">No vehicles yet.</div>
+    <!-- Fleet — compact, sortable table (click any header to sort) -->
+    <div v-if="tab === 'fleet'" class="glass overflow-x-auto">
+      <table class="w-full text-sm min-w-[860px]">
+        <thead class="text-[11px] uppercase tracking-wide text-slate-400 border-b border-white/10 select-none">
+          <tr>
+            <th class="text-left px-3 py-2.5 cursor-pointer hover:text-slate-200" @click="setSort('name')">Vehicle{{ arrow('name') }}</th>
+            <th class="text-left px-2 cursor-pointer hover:text-slate-200" @click="setSort('location')">Location{{ arrow('location') }}</th>
+            <th class="text-left px-2 cursor-pointer hover:text-slate-200" @click="setSort('status')">Status{{ arrow('status') }}</th>
+            <th class="text-right px-2 cursor-pointer hover:text-slate-200" @click="setSort('condition')">Cond{{ arrow('condition') }}</th>
+            <th class="text-right px-2 cursor-pointer hover:text-slate-200" @click="setSort('tire')">Tyre{{ arrow('tire') }}</th>
+            <th class="text-right px-2 cursor-pointer hover:text-slate-200" @click="setSort('fuel')">Fuel{{ arrow('fuel') }}</th>
+            <th class="text-right px-2 cursor-pointer hover:text-slate-200" @click="setSort('oil')">Oil{{ arrow('oil') }}</th>
+            <th class="text-right px-2 cursor-pointer hover:text-slate-200" @click="setSort('battery')">Batt{{ arrow('battery') }}</th>
+            <th class="text-center px-2">Papers</th>
+            <th class="text-left px-2 cursor-pointer hover:text-slate-200" @click="setSort('need')">Needs{{ arrow('need') }}</th>
+            <th class="text-right px-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="v in tableVehicles" :key="v.id">
+            <tr class="border-b border-white/5 hover:bg-white/5 transition"
+              :class="needScore(v) > 40 ? 'bg-loss/5' : ''">
+              <td class="px-3 py-2">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span>{{ MODE_ICON[v.model?.mode ?? 'road'] }}</span>
+                  <div class="min-w-0">
+                    <p class="font-medium truncate">{{ v.nickname || v.model?.name }}</p>
+                    <p class="text-[10px] text-slate-500 truncate">{{ v.model?.name }} · {{ num((v as any).effective_capacity_weight ?? v.model?.capacity_weight ?? 0, 1) }}t · {{ v.model?.needs_trailer ? 'tractor' : 'rigid' }}</p>
+                  </div>
+                </div>
+              </td>
+              <td class="px-2 text-slate-300 truncate max-w-[110px]">{{ v.city?.name || '—' }}</td>
+              <td class="px-2"><span class="chip capitalize text-[10px]" :class="statusChip[v.status]">{{ v.status.replace('_', ' ') }}</span></td>
+              <td class="px-2 text-right font-mono" :class="metricText(v.condition ?? 100)">{{ num(v.condition) }}%</td>
+              <td class="px-2 text-right font-mono" :class="metricText(100 - (v.tire_wear ?? 0))">{{ num(v.tire_wear) }}%</td>
+              <td class="px-2 text-right font-mono" :class="metricText(v.fuel_pct ?? 100)">{{ (v.fuel_capacity ?? 0) > 0 ? Math.round(v.fuel_pct ?? 100) + '%' : '—' }}</td>
+              <td class="px-2 text-right font-mono" :class="metricText(v.oil_level ?? 100)">{{ num(v.oil_level ?? 100) }}%</td>
+              <td class="px-2 text-right font-mono" :class="metricText(v.battery ?? 100)">{{ num(v.battery ?? 100) }}%</td>
+              <td class="px-2 text-center whitespace-nowrap">
+                <span :title="v.is_insured ? 'Insured' : 'Uninsured'" :class="v.is_insured ? '' : 'opacity-30'">🛡</span>
+                <span :title="v.is_registered ? 'Registered' : 'Unregistered'" :class="v.is_registered ? '' : 'opacity-30'">📋</span>
+              </td>
+              <td class="px-2 text-[11px]" :class="needScore(v) > 40 ? 'text-loss' : 'text-gold'">{{ needSummary(v) || '—' }}</td>
+              <td class="px-3 py-2 text-right whitespace-nowrap">
+                <button class="btn-primary !py-1 !px-2 text-[11px]" title="Full service & refuel" :disabled="working === v.id || v.status === 'en_route'" @click="fullService(v)">⚡</button>
+                <button class="btn-ghost !py-1 !px-2 text-[11px] ml-1" title="Manage" @click="toggleExpand(v.id)">{{ expandedId === v.id ? '×' : '⋯' }}</button>
+              </td>
+            </tr>
+            <!-- Expandable manage drawer with every action for this vehicle -->
+            <tr v-if="expandedId === v.id" class="bg-ink-900/50 border-b border-white/5">
+              <td colspan="11" class="px-3 py-3">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <span class="stat-label mr-1">Upgrades {{ (v as any).upgrade_slots_used ?? 0 }}/{{ v.model?.upgrade_slots ?? 0 }}</span>
+                  <button v-if="(v.fuel_capacity ?? 0) > 0" class="btn-ghost !py-1 !px-2 text-[11px]" :disabled="working === v.id || v.status === 'en_route'" @click="refuel(v)">⛽ Refuel</button>
+                  <button class="btn-ghost !py-1 !px-2 text-[11px]" :class="needs(v).repair && 'ring-1 ring-gold/60'" :disabled="working === v.id || v.status === 'en_route'" @click="repair(v)">🔧 Repair</button>
+                  <button class="btn-ghost !py-1 !px-2 text-[11px]" :class="needs(v).oil && 'ring-1 ring-gold/60'" :disabled="working === v.id || v.status === 'en_route'" @click="service(v, 'oil')">🛢 Oil</button>
+                  <button class="btn-ghost !py-1 !px-2 text-[11px]" :class="needs(v).battery && 'ring-1 ring-gold/60'" :disabled="working === v.id || v.status === 'en_route'" @click="service(v, 'battery')">🔋 Batt</button>
+                  <button class="btn-ghost !py-1 !px-2 text-[11px]" :class="!v.is_insured && 'ring-1 ring-loss/50'" :disabled="working === v.id" @click="service(v, 'insurance')">🛡 Insure</button>
+                  <button class="btn-ghost !py-1 !px-2 text-[11px]" :class="!v.is_registered && 'ring-1 ring-loss/50'" :disabled="working === v.id" @click="service(v, 'registration')">📋 Reg</button>
+                  <span class="w-px h-5 bg-white/10 mx-1" />
+                  <button class="btn-ghost !py-1 !px-2 text-[11px]" :disabled="working === v.id" @click="upgrade(v, 'engine')">⚙ Engine L{{ (v as any).engine_level ?? 0 }}</button>
+                  <button class="btn-ghost !py-1 !px-2 text-[11px]" :disabled="working === v.id" @click="upgrade(v, 'tires')">◍ Tyres L{{ (v as any).tires_level ?? 0 }}</button>
+                  <button class="btn-ghost !py-1 !px-2 text-[11px]" :disabled="working === v.id" @click="upgrade(v, 'trailer')">▤ Rig L{{ (v as any).trailer_level ?? 0 }}</button>
+                  <span v-if="v.status === 'en_route'" class="text-[11px] text-slate-500 ml-1">On the road — service when it arrives.</span>
+                </div>
+              </td>
+            </tr>
+          </template>
+          <tr v-if="!vehicles.length"><td colspan="11" class="p-8 text-center text-slate-400">No vehicles yet.</td></tr>
+        </tbody>
+      </table>
     </div>
 
     <!-- Owned trailers -->
