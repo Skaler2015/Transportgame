@@ -116,6 +116,24 @@ function canDispatch(c: Contract): boolean {
   return !!sel?.vehicle_id && !!sel?.driver_id && (!needsTrailer(c) || !!sel?.trailer_id)
 }
 
+// Estimated P&L for a contract, mirroring what the delivery actually charges:
+// tax on the payout (destination rate), tolls along the lane, and fuel burned.
+// Tax + tolls are vehicle-independent; fuel uses the chosen vehicle (or the
+// best compatible one as a preview) so profit is meaningful before you pick.
+function estFuelModel(c: Contract) {
+  return selectedVehicle(c)?.model ?? compatibleVehicles(c)[0]?.model
+}
+function costBreakdown(c: Contract) {
+  const dist = c.distance_km || 0
+  const tax = Math.round((c.payout || 0) * (c.destination?.tax_rate ?? 0))
+  const avgToll = ((c.origin?.toll_per_km ?? 0) + (c.destination?.toll_per_km ?? 0)) / 2
+  const toll = Math.round(dist * avgToll * 100)
+  const m = estFuelModel(c)
+  const fuel = m ? Math.round(dist * (m.fuel_economy || 0) * (c.origin?.fuel_price ?? 0) * 100) : 0
+  const expenses = tax + toll + fuel
+  return { tax, toll, fuel, expenses, profit: (c.payout || 0) - expenses, hasVehicle: !!m }
+}
+
 const servicingAll = ref(false)
 async function serviceAll() {
   servicingAll.value = true
@@ -249,15 +267,31 @@ onUnmounted(() => clearInterval(poll))
           <span class="text-brand-soft">· ⏱ {{ etaText(c.distance_km) }}</span>
         </p>
 
-        <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
-          <div class="rounded-lg bg-ink-900/60 px-3 py-2">
-            <p class="stat-label">Payout</p>
-            <p class="font-mono text-gold font-semibold">{{ credits(c.payout) }}</p>
+        <!-- Estimated P&L: contract value − expenses = profit -->
+        <div class="mt-3 rounded-lg bg-ink-900/60 px-3 py-2.5 text-sm space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-300">Contract value</span>
+            <span class="font-mono text-gold font-semibold">{{ credits(c.payout) }}</span>
           </div>
-          <div class="rounded-lg bg-ink-900/60 px-3 py-2">
-            <p class="stat-label">Penalty</p>
-            <p class="font-mono text-loss">{{ credits(c.penalty) }}</p>
+          <div class="flex items-center justify-between text-[12px] text-slate-400">
+            <span>Fuel {{ costBreakdown(c).hasVehicle ? '(est.)' : '' }}</span>
+            <span class="font-mono">{{ costBreakdown(c).hasVehicle ? '−' + credits(costBreakdown(c).fuel) : 'pick a truck' }}</span>
           </div>
+          <div class="flex items-center justify-between text-[12px] text-slate-400">
+            <span>Tolls</span>
+            <span class="font-mono">−{{ credits(costBreakdown(c).toll) }}</span>
+          </div>
+          <div class="flex items-center justify-between text-[12px] text-slate-400">
+            <span>Tax ({{ Math.round((c.destination?.tax_rate ?? 0) * 100) }}%)</span>
+            <span class="font-mono">−{{ credits(costBreakdown(c).tax) }}</span>
+          </div>
+          <div class="flex items-center justify-between pt-1.5 mt-1 border-t border-white/10">
+            <span class="font-semibold">Est. profit</span>
+            <span class="font-mono font-semibold" :class="costBreakdown(c).profit >= 0 ? 'text-gain' : 'text-loss'">
+              {{ credits(costBreakdown(c).profit) }}
+            </span>
+          </div>
+          <p class="text-[10px] text-slate-500 pt-0.5">Fails/late risk penalty: {{ credits(c.penalty) }}</p>
         </div>
 
         <!-- Inline dispatch: pick vehicle + (trailer) + driver, then GO -->
