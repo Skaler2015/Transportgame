@@ -186,6 +186,14 @@ class EconomyService
         $cfg = config('transoria.contracts');
         $created = 0;
 
+        // Retire any open jobs below the current payout floor so the market
+        // only ever shows contracts worth at least the minimum.
+        if (! empty($cfg['min_payout'])) {
+            Contract::where('status', Contract::STATUS_OPEN)
+                ->where('payout', '<', (int) $cfg['min_payout'])
+                ->update(['status' => Contract::STATUS_EXPIRED]);
+        }
+
         $commodities = Commodity::all()->keyBy('id');
         $cities = City::all();
 
@@ -306,6 +314,8 @@ class EconomyService
 
         $payout *= 1 + ($difficulty - 1) * 0.12;
         $payoutCents = (int) round($payout * 100);
+        // No job pays under the configured floor.
+        $payoutCents = max((int) ($cfg['min_payout'] ?? 0), $payoutCents);
         $penaltyCents = (int) round($payoutCents * $cfg['penalty_pct']);
 
         // Deadline: ideal time at reference speed, padded by slack.
