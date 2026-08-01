@@ -7,6 +7,7 @@ use App\Models\Commodity;
 use App\Models\Company;
 use App\Models\Contract;
 use App\Models\MarketPrice;
+use App\Models\Shipment;
 use App\Models\Vehicle;
 use App\Models\WorldEvent;
 use Illuminate\Support\Collection;
@@ -488,45 +489,63 @@ class EconomyService
     }
 
     /**
-     * Guarantee that every city where the company has a FREE (idle) truck offers
-     * a few open jobs that truck can actually haul — so a parked vehicle always
-     * has local work to pick up, instead of being stranded with nothing to do.
-     * Returns the number of contracts minted.
+     * Guarantee haulable work wherever the company's trucks ARE or are HEADING:
+     * for each idle truck (at its city) and each en-route truck (at its delivery
+     * destination), ensure a few open jobs that specific truck can carry start
+     * from that city — so a truck is never stranded with nothing to pick up when
+     * it arrives. Destinations are kept in the player's home country so a truck
+     * that wandered off can always find a load back. Returns contracts minted.
      */
-    public function ensureLocalWorkForIdleFleet(Company $company, int $targetPerCity = 4): int
+    public function ensureWorkForFleet(Company $company, int $targetPerCity = 4): int
     {
-        $idle = Vehicle::where('company_id', $company->id)
+        // (vehicle, city) pairs: idle trucks at their city; en-route trucks at
+        // the destination they're driving to.
+        $pairs = collect();
+        foreach (Vehicle::where('company_id', $company->id)
             ->where('status', Vehicle::STATUS_IDLE)
             ->where('condition', '>', 15)
-            ->with('model', 'city')->get();
-
-        if ($idle->isEmpty()) {
+            ->with('model', 'city')->get() as $v) {
+            if ($v->city) {
+                $pairs->push(['vehicle' => $v, 'city' => $v->city]);
+            }
+        }
+        foreach (Shipment::where('company_id', $company->id)
+            ->where('status', Shipment::STATUS_EN_ROUTE)
+            ->with(['vehicle.model', 'contract.destination'])->get() as $s) {
+            if ($s->vehicle && $s->contract?->destination) {
+                $pairs->push(['vehicle' => $s->vehicle, 'city' => $s->contract->destination]);
+            }
+        }
+        if ($pairs->isEmpty()) {
             return 0;
         }
 
-        $cities = City::all();
+        // Destinations stay in the home country (bring wandering trucks back).
+        $cities = City::where('country', $company->country)->get();
+        if ($cities->count() < 2) {
+            $cities = City::all();
+        }
         $priceLookup = $this->buildPriceLookup();
         $events = WorldEvent::active()->get();
         $commodities = Commodity::all();
         $created = 0;
 
-        foreach ($idle->groupBy('city_id') as $group) {
-            $origin = $group->first()->city;
-            if (! $origin) {
-                continue;
-            }
-            $maxCap = (float) $group->max(fn (Vehicle $v) => $v->effectiveCapacityWeight());
+        foreach ($pairs->groupBy(fn ($p) => $p['city']->id) as $group) {
+            $origin = $group->first()['city'];
+            $vehicles = $group->map(fn ($p) => $p['vehicle']);
+            $maxCap = (float) $vehicles->max(fn (Vehicle $v) => $v->effectiveCapacityWeight());
 
-            // Open jobs from this city at least one idle truck here can haul.
+            // Open jobs from here at least one of these trucks can haul.
             $have = Contract::onMarket()
                 ->where('origin_city_id', $origin->id)
                 ->with('commodity')->get()
-                ->filter(fn (Contract $c) => $group->contains(fn (Vehicle $v) => $c->commodity->canBeCarriedBy($v->model)
+                ->filter(fn (Contract $c) => $vehicles->contains(fn (Vehicle $v) => $c->commodity->canBeCarriedBy($v->model)
                     && $c->commodity->weight_per_unit * $c->units <= $v->effectiveCapacityWeight() + 0.001))
                 ->count();
 
-            // Commodities at least one idle truck here can carry.
-            $carriable = $commodities->filter(fn (Commodity $cm) => $group->contains(fn (Vehicle $v) => $cm->canBeCarriedBy($v->model)));
+            // Commodities carriable by a truck here AND light enough to fit.
+            $carriable = $commodities->filter(fn (Commodity $cm) => $cm->weight_per_unit <= $maxCap + 0.001
+                && $vehicles->contains(fn (Vehicle $v) => $cm->canBeCarriedBy($v->model)));
             if ($carriable->isEmpty()) {
                 continue;
             }

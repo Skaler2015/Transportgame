@@ -370,31 +370,33 @@ onUnmounted(() => clearInterval(poll))
 
     <div v-if="loading" class="grid place-items-center h-64 text-slate-500">Loading market…</div>
 
-    <!-- Compact, sortable contract table. Click a row's ⋯ to dispatch. -->
-    <div v-else-if="contracts.length" class="glass overflow-x-auto">
-      <table class="w-full text-sm min-w-[720px]">
-        <thead class="text-[11px] uppercase tracking-wide text-slate-400 border-b border-white/10 select-none">
-          <tr>
-            <th class="text-left px-3 py-2.5">Cargo · Route</th>
-            <th class="text-right px-2 cursor-pointer hover:text-slate-200" @click="setContractSort('distance_km')">Load{{ sortMark('distance_km') }}</th>
-            <th class="text-right px-2 cursor-pointer hover:text-slate-200" @click="setContractSort('payout')">Value{{ sortMark('payout') }}</th>
+    <!-- Compact, sortable contract table. Click a row's GO to dispatch. -->
+    <div v-else-if="contracts.length" class="glass !p-0 overflow-hidden">
+      <div class="overflow-x-auto">
+      <table class="w-full text-sm min-w-[720px] border-collapse">
+        <thead class="text-[11px] uppercase tracking-wider text-slate-400 select-none bg-ink-900/80 backdrop-blur sticky top-0 z-10">
+          <tr class="border-b border-white/10">
+            <th class="text-left px-4 py-3 font-semibold">Cargo · Route</th>
+            <th class="text-right px-2 cursor-pointer hover:text-brand-soft transition" @click="setContractSort('distance_km')">Load{{ sortMark('distance_km') }}</th>
+            <th class="text-right px-2 cursor-pointer hover:text-brand-soft transition" @click="setContractSort('payout')">Value{{ sortMark('payout') }}</th>
             <th class="text-right px-2">Est. profit</th>
-            <th class="text-center px-2 cursor-pointer hover:text-slate-200" @click="setContractSort('difficulty')">Diff{{ sortMark('difficulty') }}</th>
-            <th class="text-right px-3">Dispatch</th>
+            <th class="text-center px-2 cursor-pointer hover:text-brand-soft transition" @click="setContractSort('difficulty')">Diff{{ sortMark('difficulty') }}</th>
+            <th class="text-right px-4">Dispatch</th>
           </tr>
         </thead>
         <tbody>
           <template v-for="c in contracts" :key="c.id">
-            <tr class="border-b border-white/5 hover:bg-white/5 transition" :class="c.at_fleet_city ? 'bg-brand/5' : ''">
-              <td class="px-3 py-2">
-                <div class="flex items-center gap-2 min-w-0">
+            <tr class="border-b border-white/5 transition hover:bg-brand/[0.06] odd:bg-white/[0.015]"
+              :class="c.at_fleet_city ? 'bg-brand/[0.07]' : ''">
+              <td class="px-4 py-2.5 border-l-2" :class="c.at_fleet_city ? (c.fleet_arriving ? 'border-gold/70' : 'border-brand') : 'border-transparent'">
+                <div class="flex items-center gap-2.5 min-w-0">
                   <CommodityBadge :commodity="c.commodity" size="sm" />
                   <div class="min-w-0">
-                    <p class="font-medium truncate">
-                      {{ c.origin?.name }} <span class="text-brand">→</span> {{ c.destination?.name }}
+                    <p class="font-semibold truncate">
+                      {{ c.origin?.name }} <span class="text-brand mx-0.5">→</span> {{ c.destination?.name }}
                     </p>
-                    <p class="text-[10px] truncate">
-                      <span v-if="c.at_fleet_city" class="text-brand-soft font-semibold">🚚 {{ c.fleet_arriving ? 'Truck arriving' : 'Truck here' }} · </span>
+                    <p class="text-[10px] truncate mt-0.5">
+                      <span v-if="c.at_fleet_city" class="font-semibold" :class="c.fleet_arriving ? 'text-gold' : 'text-brand-soft'">🚚 {{ c.fleet_arriving ? 'Truck arriving' : 'Truck here' }} · </span>
                       <span v-if="c.is_rush" class="text-loss font-semibold">RUSH · </span>
                       <span class="text-slate-500">{{ c.commodity?.name }}</span>
                     </p>
@@ -455,6 +457,7 @@ onUnmounted(() => clearInterval(poll))
           </template>
         </tbody>
       </table>
+      </div>
     </div>
 
     <div v-else class="glass p-10 text-center text-slate-400">

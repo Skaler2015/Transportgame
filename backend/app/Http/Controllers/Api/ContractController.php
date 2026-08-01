@@ -54,22 +54,6 @@ class ContractController extends Controller
         $this->ensureCityCoverage($company->country);
         $this->ensureLocalWork($company);
 
-        $query = Contract::onMarket()->with(['commodity', 'origin', 'destination'])
-            // Only domestic contracts — origin city in the player's country.
-            ->whereHas('origin', fn ($q) => $q->where('country', $company->country));
-
-        foreach (['origin_city_id', 'destination_city_id', 'commodity_id'] as $f) {
-            if (! empty($filters[$f])) {
-                $query->where($f, $filters[$f]);
-            }
-        }
-
-        $sort = $filters['sort'] ?? 'payout';
-        $query->orderByDesc($sort === 'payout' ? 'payout' : $sort);
-        if ($sort !== 'payout') {
-            $query->reorder()->orderBy($sort);
-        }
-
         // The fleet used for the "haulable" filter and for BACKHAUL jobs — work
         // starting where a truck already is, so it doesn't run back empty. We
         // count BOTH idle trucks (available now) AND trucks currently EN ROUTE,
@@ -89,6 +73,29 @@ class ContractController extends Controller
         $idleCityIds = $idleFleet->pluck('city_id')->filter()->unique()->flip();
         $arrivingCityIds = $inbound->pluck('contract.destination_city_id')->filter()->unique()->flip();
         $fleetCityIds = $idleCityIds->keys()->merge($arrivingCityIds->keys())->unique()->flip();
+
+        $query = Contract::onMarket()->with(['commodity', 'origin', 'destination'])
+            // Domestic jobs (origin in the player's country) PLUS any city where a
+            // truck of theirs is parked or heading — so a truck that ended up in
+            // another region still sees local work and can get home.
+            ->where(function ($q) use ($company, $fleetCityIds) {
+                $q->whereHas('origin', fn ($o) => $o->where('country', $company->country));
+                if ($fleetCityIds->isNotEmpty()) {
+                    $q->orWhereIn('origin_city_id', $fleetCityIds->keys()->all());
+                }
+            });
+
+        foreach (['origin_city_id', 'destination_city_id', 'commodity_id'] as $f) {
+            if (! empty($filters[$f])) {
+                $query->where($f, $filters[$f]);
+            }
+        }
+
+        $sort = $filters['sort'] ?? 'payout';
+        $query->orderByDesc($sort === 'payout' ? 'payout' : $sort);
+        if ($sort !== 'payout') {
+            $query->reorder()->orderBy($sort);
+        }
 
         $wantHaulable = filter_var($filters['haulable'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $wantBackhaul = filter_var($filters['backhaul'] ?? false, FILTER_VALIDATE_BOOLEAN);
@@ -171,21 +178,27 @@ class ContractController extends Controller
         }
 
         try {
-            app(EconomyService::class)->ensureLocalWorkForIdleFleet($company);
+            app(EconomyService::class)->ensureWorkForFleet($company);
         } catch (\Throwable $e) {
-            Log::error('Local-work top-up failed: '.$e->getMessage());
+            Log::error('Fleet-work top-up failed: '.$e->getMessage());
         }
     }
 
-    /** True if any vehicle in $fleet can carry this contract's cargo. */
+    /**
+     * True if a truck the player has PARKED AT THE ORIGIN can carry this cargo —
+     * i.e. the job is dispatchable right now. Matching the dispatch picker (which
+     * only offers trucks at the origin) means the board never shows a job that
+     * would then say "no compatible idle vehicle".
+     */
     private function haulableBy(Contract $contract, Collection $fleet): bool
     {
         $commodity = $contract->commodity;
         $weight = $commodity->weight_per_unit * $contract->units;
         $volume = $commodity->volume_per_unit * $contract->units;
 
-        return $fleet->contains(function (Vehicle $v) use ($commodity, $weight, $volume) {
-            return $commodity->canBeCarriedBy($v->model)
+        return $fleet->contains(function (Vehicle $v) use ($contract, $commodity, $weight, $volume) {
+            return $v->city_id === $contract->origin_city_id
+                && $commodity->canBeCarriedBy($v->model)
                 && $weight <= $v->effectiveCapacityWeight() + 0.001
                 && $volume <= $v->effectiveCapacityVolume() + 0.001;
         });

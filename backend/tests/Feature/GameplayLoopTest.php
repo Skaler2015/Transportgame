@@ -347,6 +347,46 @@ class GameplayLoopTest extends TestCase
         }
     }
 
+    public function test_market_guarantees_work_at_a_trucks_destination(): void
+    {
+        // Wherever a truck is heading, haulable work must be waiting when it arrives.
+        $token = $this->postJson('/api/register', [
+            'name' => 'Router2', 'email' => 'router2@transoria.io',
+            'password' => 'password123', 'company_name' => 'Router2 Freight',
+        ])->json('token');
+
+        $company = User::where('email', 'router2@transoria.io')->first()->company;
+        $companyService = app(CompanyService::class);
+        $shipmentService = app(ShipmentService::class);
+        $vehicle = $company->vehicles()->with('model')->first();
+        $driver = $company->drivers()->first();
+
+        $contract = null;
+        for ($i = 0; $i < 8 && ! $contract; $i++) {
+            $this->artisan('world:tick');
+            $contract = Contract::onMarket()
+                ->where('origin_city_id', $company->headquarters_city_id)
+                ->with('commodity')->get()
+                ->first(fn (Contract $c) => $this->fits($c, $vehicle));
+        }
+        $this->assertNotNull($contract);
+        $companyService->acceptContract($company, $contract);
+        $shipmentService->dispatch($company, $contract, $vehicle, $driver);
+        $destId = $contract->destination_city_id;
+
+        // Viewing the board tops up work at the destination the truck is driving to.
+        $this->withToken($token)->getJson('/api/contracts')->assertOk();
+
+        $haulable = Contract::onMarket()
+            ->where('origin_city_id', $destId)
+            ->with('commodity')->get()
+            ->filter(fn (Contract $c) => $c->commodity->canBeCarriedBy($vehicle->model)
+                && $c->commodity->weight_per_unit * $c->units <= $vehicle->effectiveCapacityWeight() + 0.001);
+
+        $this->assertGreaterThan(0, $haulable->count(),
+            'A truck should find haulable work waiting at its destination.');
+    }
+
     public function test_market_guarantees_local_work_where_a_free_truck_is_parked(): void
     {
         // A free truck must always have jobs starting from its own city.
