@@ -7,7 +7,6 @@ import { useClock } from '../composables/useClock'
 import type { Contract, Vehicle, Trailer, Driver, Shipment } from '../types'
 import { credits, num } from '../utils/format'
 import CommodityBadge from '../components/CommodityBadge.vue'
-import ShipmentRow from '../components/ShipmentRow.vue'
 
 const game = useGameStore()
 const toast = useToastStore()
@@ -118,6 +117,21 @@ function fuelShort(c: Contract): boolean {
 }
 
 const activeShipments = computed(() => shipments.value.filter((s) => s.status === 'en_route'))
+// On the Road, soonest-to-arrive first (least time remaining at the top).
+const activeSorted = computed(() =>
+  [...activeShipments.value].sort(
+    (a, b) => new Date(a.eta_at).getTime() - new Date(b.eta_at).getTime(),
+  ),
+)
+// Time left to a shipment's ETA — recomputed every second via the `now` clock.
+function etaLeft(s: Shipment): string {
+  const ms = new Date(s.eta_at).getTime() - now.value
+  if (ms <= 0) return 'arriving…'
+  const secs = Math.round(ms / 1000)
+  const m = Math.floor(secs / 60)
+  const sec = secs % 60
+  return m ? `${m}m ${sec}s` : `${sec}s`
+}
 const pastShipments = computed(() => shipments.value.filter((s) => s.status !== 'en_route').slice(0, 8))
 
 const servicingAll = ref(false)
@@ -303,8 +317,18 @@ onUnmounted(() => clearInterval(poll))
       <h2 class="font-semibold">On the Road
         <span class="chip bg-brand/15 text-brand-soft ml-1">{{ activeShipments.length }}</span>
       </h2>
-      <div v-if="activeShipments.length" class="grid sm:grid-cols-2 gap-3">
-        <ShipmentRow v-for="s in activeShipments" :key="s.id" :shipment="s" :now="now" />
+      <!-- Compact list: only route + time left, soonest arrival first. -->
+      <div v-if="activeSorted.length" class="glass divide-y divide-white/5">
+        <div v-for="s in activeSorted" :key="s.id" class="flex items-center justify-between px-4 py-3">
+          <p class="font-semibold text-sm truncate">
+            {{ s.contract?.origin?.name }}
+            <span class="text-slate-500 mx-1">→</span>
+            {{ s.contract?.destination?.name }}
+          </p>
+          <p class="font-mono text-sm shrink-0" :class="etaLeft(s) === 'arriving…' ? 'text-gain' : 'text-brand-soft'">
+            ⏱ {{ etaLeft(s) }}
+          </p>
+        </div>
       </div>
       <div v-else class="glass p-6 text-center text-slate-500 text-sm">Nothing en route right now.</div>
     </section>
