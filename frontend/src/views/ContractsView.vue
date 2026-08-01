@@ -154,8 +154,9 @@ const vehiclesNeedingFix = computed(() => freeVehicles.value.filter((v) => vehic
 function scrollToFreeVehicles() {
   document.getElementById('free-vehicles')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
-// Idle trailers and whether each needs a repair (condition below 90).
-const freeTrailers = computed(() => trailers.value.filter((t) => t.available))
+// Every trailer that isn't on the road — including worn-out ones (condition
+// too low to count as "available"), so the player can repair them from here.
+const freeTrailers = computed(() => trailers.value.filter((t) => t.status !== 'en_route'))
 function trailerNeedsRepair(t: Trailer): boolean {
   return (t.condition ?? 100) < 90
 }
