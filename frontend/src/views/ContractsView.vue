@@ -141,6 +141,11 @@ function vehicleNeeds(v: Vehicle): string[] {
   ].filter(Boolean)
 }
 const NEED_ICON: Record<string, string> = { repair: '🔧', oil: '🛢', battery: '🔋', insurance: '🛡', registration: '📋' }
+// Free vehicles that need any service — for the mobile alert banner.
+const vehiclesNeedingFix = computed(() => freeVehicles.value.filter((v) => vehicleNeeds(v).length > 0))
+function scrollToFreeVehicles() {
+  document.getElementById('free-vehicles')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 const servingVeh = ref<number | null>(null)
 // One click fixes exactly what was clicked, right from the Free Vehicles panel.
 async function fixNeed(v: Vehicle, need: string) {
@@ -426,6 +431,14 @@ onUnmounted(() => clearInterval(poll))
       </label>
     </div>
 
+    <!-- Mobile alert: a free vehicle needs service. Tap → jump to Free Vehicles. -->
+    <button v-if="vehiclesNeedingFix.length" type="button"
+      class="lg:hidden w-full glass !p-3 ring-1 ring-gold/40 flex items-center justify-between gap-2 text-left"
+      @click="scrollToFreeVehicles">
+      <span class="text-sm text-gold">🛠 {{ vehiclesNeedingFix.length }} vehicle(s) need service</span>
+      <span class="text-xs text-brand-soft shrink-0">Tap to fix →</span>
+    </button>
+
     <div v-if="loading" class="grid place-items-center h-64 text-slate-500">Loading market…</div>
 
     <!-- Compact, sortable contract table. Click a row's GO to dispatch. -->
@@ -622,7 +635,7 @@ onUnmounted(() => clearInterval(poll))
      </div>
 
      <!-- Free vehicles and where they're parked -->
-     <div class="glass p-4">
+     <div id="free-vehicles" class="glass p-4 scroll-mt-4">
        <h3 class="font-semibold text-sm mb-2">
          Free Vehicles <span class="chip bg-gain/15 text-gain ml-1">{{ freeVehicles.length }}</span>
        </h3>
