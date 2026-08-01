@@ -48,6 +48,14 @@ class TrailerController extends Controller
             $trailer = $this->companies->buyTrailer($company, $model);
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            // Surface the real reason (schema drift, etc.) instead of a bare 500,
+            // and log it so it shows up server-side too.
+            \Illuminate\Support\Facades\Log::error('Trailer purchase failed: '.$e->getMessage());
+
+            return response()->json([
+                'message' => 'Could not buy trailer: '.$e->getMessage(),
+            ], 500);
         }
 
         return (new TrailerResource($trailer->load('model', 'city')))

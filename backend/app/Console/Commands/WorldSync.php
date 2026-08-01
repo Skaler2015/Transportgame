@@ -77,8 +77,12 @@ class WorldSync extends Command
         $trailered = 0;
         Company::with('headquarters')->chunkById(200, function ($batch) use ($companies, &$trailered) {
             foreach ($batch as $company) {
-                if ($companies->grantStarterTrailer($company, $company->headquarters)) {
-                    $trailered++;
+                try {
+                    if ($companies->grantStarterTrailer($company, $company->headquarters)) {
+                        $trailered++;
+                    }
+                } catch (\Throwable $e) {
+                    $this->warn("Starter trailer for company #{$company->id}: ".$e->getMessage());
                 }
             }
         });

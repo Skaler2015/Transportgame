@@ -74,10 +74,17 @@ class EnsureSchemaUpToDate
                 return;
             }
 
-            Artisan::call('migrate', ['--force' => true]);
+            // Only mark the schema current if migrate actually succeeded — a
+            // non-zero exit (a migration that half-applied) must retry on the
+            // next request rather than be recorded as done.
+            $migrateCode = Artisan::call('migrate', ['--force' => true]);
             Artisan::call('transoria:worldsync');
 
-            @file_put_contents($markerFile, $target);
+            if ($migrateCode === 0) {
+                @file_put_contents($markerFile, $target);
+            } else {
+                Log::error('EnsureSchemaUpToDate: migrate exited '.$migrateCode.' — will retry.');
+            }
         } catch (\Throwable $e) {
             Log::error('EnsureSchemaUpToDate failed: '.$e->getMessage());
         } finally {
