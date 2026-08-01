@@ -14,7 +14,7 @@ return [
     // deploy the app notices the stored marker no longer matches and runs
     // `migrate --force` + `transoria:worldsync` once, so shared hosts that
     // never run the CLI still stay fully migrated. See EnsureSchemaUpToDate.
-    'schema_version' => '2026.08.04-city-econ',
+    'schema_version' => '2026.08.05-vehicle-depth',
 
     // In-game currency label.
     'currency' => ['code' => 'CR', 'symbol' => '₡', 'name' => 'Credits'],
@@ -168,12 +168,24 @@ return [
         'sell_spread' => 0.03,        // you sell 3% below local price
     ],
 
-    // Vehicle repair & upgrades.
+    // Vehicle repair, service & upgrades.
     'garage' => [
         'repair_cost_per_point' => 900,     // ₡ cents per condition point restored
         'tire_cost_per_point' => 500,       // ₡ cents per tire-wear point restored
         'upgrade_base_cost' => 60_000_00,   // ₡ cents for level 1, scales with level
         'max_upgrade_level' => 3,
+
+        // Engine oil & battery wear per 1000 km, and the cost to restore them.
+        'oil_loss_per_1000km' => 14.0,
+        'battery_loss_per_1000km' => 6.0,
+        'oil_change_cost' => 8_000_00,
+        'battery_cost' => 16_000_00,
+
+        // Papers: how long a renewal lasts (real days) and what it costs.
+        'insurance_days' => 7,
+        'insurance_cost' => 22_000_00,
+        'registration_days' => 30,
+        'registration_cost' => 45_000_00,
     ],
 
     // Financing.

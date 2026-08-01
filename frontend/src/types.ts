@@ -99,6 +99,12 @@ export interface Vehicle {
   status: string
   condition: number
   tire_wear: number
+  oil_level?: number
+  battery?: number
+  insured_until?: string | null
+  registered_until?: string | null
+  is_insured?: boolean
+  is_registered?: boolean
   fuel: number
   fuel_capacity?: number
   fuel_pct?: number

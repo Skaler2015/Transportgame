@@ -73,6 +73,15 @@ async function refuel(v: Vehicle) {
   } catch (e) { toast.error(apiError(e)) } finally { working.value = null }
 }
 
+async function service(v: Vehicle, type: 'oil' | 'battery' | 'insurance' | 'registration') {
+  working.value = v.id
+  try {
+    const { data } = await api.post(`/vehicles/${v.id}/service`, { type })
+    toast.success(data.message)
+    await load(); game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)) } finally { working.value = null }
+}
+
 async function upgrade(v: Vehicle, kind: 'engine' | 'tires' | 'trailer') {
   working.value = v.id
   try {
@@ -176,6 +185,26 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
             </div>
             <div class="h-1.5 rounded-full bg-ink-700 overflow-hidden"><div class="h-full" :class="barColor(v.fuel_pct ?? 100)" :style="{ width: Math.min(100, v.fuel_pct ?? 100) + '%' }" /></div>
           </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <div class="flex justify-between text-[11px] mb-1"><span class="text-slate-400">Oil</span><span class="font-mono">{{ num(v.oil_level ?? 100) }}%</span></div>
+              <div class="h-1.5 rounded-full bg-ink-700 overflow-hidden"><div class="h-full" :class="barColor(v.oil_level ?? 100)" :style="{ width: (v.oil_level ?? 100) + '%' }" /></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-[11px] mb-1"><span class="text-slate-400">Battery</span><span class="font-mono">{{ num(v.battery ?? 100) }}%</span></div>
+              <div class="h-1.5 rounded-full bg-ink-700 overflow-hidden"><div class="h-full" :class="barColor(v.battery ?? 100)" :style="{ width: (v.battery ?? 100) + '%' }" /></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Papers -->
+        <div class="flex items-center gap-2 mt-3 text-[11px]">
+          <span class="chip" :class="v.is_insured ? 'bg-gain/20 text-gain' : 'bg-loss/20 text-loss'">
+            {{ v.is_insured ? '🛡 Insured' : '⚠ Uninsured' }}
+          </span>
+          <span class="chip" :class="v.is_registered ? 'bg-gain/20 text-gain' : 'bg-loss/20 text-loss'">
+            {{ v.is_registered ? '📋 Registered' : '⚠ Unregistered' }}
+          </span>
         </div>
 
         <div class="grid grid-cols-3 gap-2 mt-3 text-center text-[11px]">
@@ -192,6 +221,13 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
               <button v-if="(v.fuel_capacity ?? 0) > 0" class="btn-ghost !py-1 !px-2 text-[11px]" :disabled="working === v.id || v.status === 'en_route'" @click="refuel(v)">⛽ Refuel</button>
               <button class="btn-ghost !py-1 !px-2 text-[11px]" :disabled="working === v.id || v.status === 'en_route'" @click="repair(v)">🔧 Service</button>
             </div>
+          </div>
+          <!-- Service centre -->
+          <div class="grid grid-cols-4 gap-1.5 mb-2">
+            <button class="btn-ghost !py-1 text-[10px]" :disabled="working === v.id || v.status === 'en_route'" @click="service(v, 'oil')">🛢 Oil</button>
+            <button class="btn-ghost !py-1 text-[10px]" :disabled="working === v.id || v.status === 'en_route'" @click="service(v, 'battery')">🔋 Batt</button>
+            <button class="btn-ghost !py-1 text-[10px]" :class="!v.is_insured && 'ring-1 ring-loss/50'" :disabled="working === v.id" @click="service(v, 'insurance')">🛡 Insure</button>
+            <button class="btn-ghost !py-1 text-[10px]" :class="!v.is_registered && 'ring-1 ring-loss/50'" :disabled="working === v.id" @click="service(v, 'registration')">📋 Reg</button>
           </div>
           <div class="grid grid-cols-3 gap-1.5">
             <button class="btn-ghost !py-1 text-[11px] flex-col" :disabled="working === v.id" @click="upgrade(v, 'engine')">

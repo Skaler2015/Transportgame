@@ -42,4 +42,21 @@ class GarageController extends Controller
 
         return response()->json(['message' => ucfirst($data['kind']).' upgraded.']);
     }
+
+    /** Service-centre jobs: oil change, battery, insurance, registration. */
+    public function service(Request $request, Vehicle $vehicle)
+    {
+        $company = $this->company($request);
+        $data = $request->validate([
+            'type' => ['required', 'in:oil,battery,insurance,registration'],
+        ]);
+
+        try {
+            $result = $this->garage->service($company, $vehicle, $data['type']);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['message' => $result['message']]);
+    }
 }

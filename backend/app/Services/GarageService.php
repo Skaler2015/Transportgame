@@ -51,6 +51,66 @@ class GarageService
         return $vehicle;
     }
 
+    public const SERVICES = ['oil', 'battery', 'insurance', 'registration'];
+
+    /**
+     * Perform a service-centre job: oil change, battery replacement, or renewing
+     * insurance / registration papers. Returns the vehicle and a message.
+     *
+     * @return array{vehicle: Vehicle, message: string}
+     */
+    public function service(Company $company, Vehicle $vehicle, string $type): array
+    {
+        if ($vehicle->company_id !== $company->id) {
+            throw new RuntimeException('That vehicle is not yours.');
+        }
+        if (! in_array($type, self::SERVICES, true)) {
+            throw new RuntimeException('Unknown service.');
+        }
+        if ($vehicle->status === Vehicle::STATUS_EN_ROUTE) {
+            throw new RuntimeException('Cannot service a vehicle that is on the road.');
+        }
+
+        $cfg = config('transoria.garage');
+
+        [$cost, $label, $apply] = match ($type) {
+            'oil' => [
+                (int) $cfg['oil_change_cost'], 'Oil change',
+                function (Vehicle $v) { $v->oil_level = 100; },
+            ],
+            'battery' => [
+                (int) $cfg['battery_cost'], 'Battery replacement',
+                function (Vehicle $v) { $v->battery = 100; },
+            ],
+            'insurance' => [
+                (int) $cfg['insurance_cost'], 'Insurance renewal',
+                function (Vehicle $v) use ($cfg) {
+                    $base = ($v->isInsured() ? $v->insured_until : now());
+                    $v->insured_until = $base->copy()->addDays((int) $cfg['insurance_days']);
+                },
+            ],
+            'registration' => [
+                (int) $cfg['registration_cost'], 'Registration renewal',
+                function (Vehicle $v) use ($cfg) {
+                    $base = ($v->isRegistered() ? $v->registered_until : now());
+                    $v->registered_until = $base->copy()->addDays((int) $cfg['registration_days']);
+                },
+            ],
+        };
+
+        if ($company->cash < $cost) {
+            throw new RuntimeException('Not enough cash for this service.');
+        }
+
+        $this->ledger->post($company, LedgerEntry::CAT_UPKEEP,
+            "{$label}: {$vehicle->model->name}", -$cost, $vehicle);
+
+        $apply($vehicle);
+        $vehicle->save();
+
+        return ['vehicle' => $vehicle, 'message' => "{$label} done."];
+    }
+
     /** Buy the next level of an upgrade (engine|tires|trailer). */
     public function upgrade(Company $company, Vehicle $vehicle, string $kind): Vehicle
     {

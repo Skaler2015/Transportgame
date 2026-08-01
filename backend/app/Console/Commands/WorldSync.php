@@ -128,6 +128,14 @@ class WorldSync extends Command
         }
         $this->info("Enriched {$enriched} cities with economic attributes.");
 
+        // 7. Give existing vehicles valid papers so nobody starts uninsured.
+        $g = config('transoria.garage');
+        $papered = Vehicle::whereNull('registered_until')->update([
+            'insured_until' => now()->addDays((int) $g['insurance_days']),
+            'registered_until' => now()->addDays((int) $g['registration_days']),
+        ]);
+        $this->info("Issued papers to {$papered} existing vehicles.");
+
         $this->info('World sync complete.');
 
         return self::SUCCESS;

@@ -337,6 +337,29 @@ class GameplayLoopTest extends TestCase
         $this->assertCount(0, $achievements->check($company->fresh()));
     }
 
+    public function test_garage_services_restore_health_and_renew_papers(): void
+    {
+        $user = User::factory()->create();
+        $company = app(CompanyService::class)->found($user, 'Garage Co');
+        $garage = app(\App\Services\GarageService::class);
+
+        $vehicle = $company->vehicles()->with('model')->first();
+        $this->assertTrue($vehicle->isInsured(), 'A new vehicle ships insured.');
+
+        // Neglect it, then service it.
+        $vehicle->update(['oil_level' => 10, 'battery' => 15, 'insured_until' => now()->subDay()]);
+        $this->assertFalse($vehicle->fresh()->isInsured());
+
+        $garage->service($company->fresh(), $vehicle->fresh(), 'oil');
+        $this->assertSame(100.0, (float) $vehicle->fresh()->oil_level);
+
+        $garage->service($company->fresh(), $vehicle->fresh(), 'battery');
+        $this->assertSame(100.0, (float) $vehicle->fresh()->battery);
+
+        $garage->service($company->fresh(), $vehicle->fresh(), 'insurance');
+        $this->assertTrue($vehicle->fresh()->isInsured(), 'Renewal restores insurance.');
+    }
+
     public function test_reset_wipes_progress_and_reissues_the_starter_loadout(): void
     {
         $user = User::factory()->create();

@@ -69,6 +69,19 @@ class CompanyService
         return $company->fresh(['vehicles', 'drivers', 'headquarters']);
     }
 
+    /** Full oil/battery and valid papers for a newly-acquired vehicle. */
+    private function freshPapers(): array
+    {
+        $g = config('transoria.garage');
+
+        return [
+            'oil_level' => 100,
+            'battery' => 100,
+            'insured_until' => now()->addDays((int) $g['insurance_days']),
+            'registered_until' => now()->addDays((int) $g['registration_days']),
+        ];
+    }
+
     /** Validate a "#rrggbb" colour; return normalised value or null. */
     private function normaliseHexColor(?string $color): ?string
     {
@@ -160,7 +173,7 @@ class CompanyService
         $model = VehicleModel::where('key', $starter['vehicle_model'])->first()
             ?? VehicleModel::orderBy('price')->first();
         if ($model && $hq) {
-            Vehicle::create([
+            Vehicle::create(array_merge([
                 'company_id' => $company->id,
                 'vehicle_model_id' => $model->id,
                 'city_id' => $hq->id,
@@ -168,7 +181,7 @@ class CompanyService
                 'status' => Vehicle::STATUS_IDLE,
                 'condition' => 100,
                 'fuel' => $model->fuel_capacity,
-            ]);
+            ], $this->freshPapers()));
         }
 
         $this->grantStarterTrailer($company, $hq);
@@ -291,14 +304,14 @@ class CompanyService
 
         $city ??= $company->headquarters ?? City::first();
 
-        $vehicle = Vehicle::create([
+        $vehicle = Vehicle::create(array_merge([
             'company_id' => $company->id,
             'vehicle_model_id' => $model->id,
             'city_id' => $city->id,
             'status' => Vehicle::STATUS_IDLE,
             'condition' => 100,
             'fuel' => $model->fuel_capacity,
-        ]);
+        ], $this->freshPapers()));
 
         $this->ledger->post($company, \App\Models\LedgerEntry::CAT_PURCHASE,
             "Purchased {$model->name}", -$model->price, $vehicle);

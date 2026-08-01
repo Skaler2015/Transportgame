@@ -14,11 +14,25 @@ class Vehicle extends Model
         'condition' => 'float',
         'tire_wear' => 'float',
         'fuel' => 'float',
+        'oil_level' => 'float',
+        'battery' => 'float',
+        'insured_until' => 'datetime',
+        'registered_until' => 'datetime',
         'odometer' => 'integer',
         'engine_level' => 'integer',
         'tires_level' => 'integer',
         'trailer_level' => 'integer',
     ];
+
+    public function isInsured(): bool
+    {
+        return $this->insured_until !== null && $this->insured_until->isFuture();
+    }
+
+    public function isRegistered(): bool
+    {
+        return $this->registered_until !== null && $this->registered_until->isFuture();
+    }
 
     /** Effective cargo weight capacity including trailer upgrades (+8%/level). */
     public function effectiveCapacityWeight(): float

@@ -16,6 +16,12 @@ class VehicleResource extends JsonResource
             'status' => $this->status,
             'condition' => (float) $this->condition,
             'tire_wear' => (float) $this->tire_wear,
+            'oil_level' => (float) $this->oil_level,
+            'battery' => (float) $this->battery,
+            'insured_until' => $this->insured_until?->toIso8601String(),
+            'registered_until' => $this->registered_until?->toIso8601String(),
+            'is_insured' => $this->isInsured(),
+            'is_registered' => $this->isRegistered(),
             'fuel' => (float) $this->fuel,
             'fuel_capacity' => $this->whenLoaded('model', fn () => (float) $this->model->fuel_capacity),
             'fuel_pct' => $this->whenLoaded('model', fn () => $this->model->fuel_capacity > 0

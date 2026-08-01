@@ -208,11 +208,19 @@ class ShipmentService
             $weatherFactor = self::WEATHER_FACTOR[$shipment->weather_snapshot] ?? 1.0;
             $weatherRisk = $weatherFactor < 0.85 ? 1.6 : 1.0;
 
-            $breakdownChance = $cfg['breakdown_base_chance'] * (2 - $reliability) * (1 + ($bonuses['breakdown_chance'] ?? 0));
+            // Neglected oil/battery raise breakdown odds; lapsed papers raise
+            // accident odds (and invite fines on top of an accident).
+            $oilLow = $vehicle->oil_level < 25;
+            $batteryLow = $vehicle->battery < 20;
+
+            $breakdownChance = $cfg['breakdown_base_chance'] * (2 - $reliability)
+                * (1 + ($bonuses['breakdown_chance'] ?? 0))
+                * (1 + ($oilLow ? 0.6 : 0) + ($batteryLow ? 0.4 : 0));
             $accidentChance = $cfg['accident_base_chance']
                 * (1 + ($driver->fatigue / 100))
                 * $weatherRisk
-                * (1 - $driver->skill / 300);
+                * (1 - $driver->skill / 300)
+                * (1 + (! $vehicle->isRegistered() ? 0.25 : 0));
 
             $failed = false;
             $repairCost = 0;
@@ -299,6 +307,10 @@ class ShipmentService
             // Tyre upgrades cut wear by 15% per level.
             $tireResist = max(0.4, 1 - 0.15 * $vehicle->tires_level);
             $vehicle->tire_wear = min(100, $vehicle->tire_wear + $km / 1000 * $cfg['tire_loss_per_1000km'] * $tireResist);
+            // Engine oil and battery drain with distance; service to restore.
+            $garage = config('transoria.garage');
+            $vehicle->oil_level = max(0, $vehicle->oil_level - $km / 1000 * $garage['oil_loss_per_1000km']);
+            $vehicle->battery = max(0, $vehicle->battery - $km / 1000 * $garage['battery_loss_per_1000km']);
             // Fuel was already burned from the tank at dispatch — don't drain twice.
             $vehicle->status = $vehicle->condition < 15 ? Vehicle::STATUS_MAINTENANCE : Vehicle::STATUS_IDLE;
             $vehicle->city_id = $contract->destination_city_id;
