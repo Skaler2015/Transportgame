@@ -220,8 +220,16 @@ function toggleContract(id: number) {
 // Pick the strongest sensible rig for a contract: the tightest-fitting truck
 // with the most fuel/best condition, the smallest trailer that carries it,
 // and the most skilled available driver — so one tap on GO dispatches it.
+// A vehicle we could actually dispatch this job with right now: either it
+// self-hauls, or it needs a trailer AND a compatible trailer is available.
+function dispatchableNow(v: Vehicle, c: Contract): boolean {
+  return !v.model?.needs_trailer || compatibleTrailers(c).length > 0
+}
 function bestVehicle(c: Contract): Vehicle | undefined {
   return [...compatibleVehicles(c)].sort((a, b) => {
+    // Prefer a truck we can dispatch immediately over a tractor with no trailer.
+    const da = dispatchableNow(a, c) ? 0 : 1, db = dispatchableNow(b, c) ? 0 : 1
+    if (da !== db) return da - db
     const capA = a.model?.capacity_weight ?? 0, capB = b.model?.capacity_weight ?? 0
     if (capA !== capB) return capA - capB // conserve big trucks — smallest that fits
     const fuel = (b.fuel_pct ?? 100) - (a.fuel_pct ?? 100)
