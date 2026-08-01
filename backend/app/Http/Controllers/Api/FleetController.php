@@ -56,7 +56,23 @@ class FleetController extends Controller
             ->orderBy('status')
             ->get();
 
-        return VehicleResource::collection($vehicles);
+        // Per-km upkeep rates so the client can estimate a run's true service &
+        // fuel cost (auto-charged on arrival). Costs are integer cents.
+        $g = config('transoria.garage');
+        $s = config('transoria.shipment');
+
+        return VehicleResource::collection($vehicles)->additional([
+            'upkeep' => [
+                'repair_cost_per_point' => (int) $g['repair_cost_per_point'],
+                'tire_cost_per_point' => (int) $g['tire_cost_per_point'],
+                'oil_change_cost' => (int) $g['oil_change_cost'],
+                'battery_cost' => (int) $g['battery_cost'],
+                'condition_loss_per_1000km' => (float) $s['condition_loss_per_1000km'],
+                'tire_loss_per_1000km' => (float) $s['tire_loss_per_1000km'],
+                'oil_loss_per_1000km' => (float) $g['oil_loss_per_1000km'],
+                'battery_loss_per_1000km' => (float) $g['battery_loss_per_1000km'],
+            ],
+        ]);
     }
 
     /** The dealership catalog with lock/afford flags for this company. */

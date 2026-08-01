@@ -66,9 +66,20 @@ async function load(silent = false) {
   }
 }
 
+interface Upkeep {
+  repair_cost_per_point: number; tire_cost_per_point: number
+  oil_change_cost: number; battery_cost: number
+  condition_loss_per_1000km: number; tire_loss_per_1000km: number
+  oil_loss_per_1000km: number; battery_loss_per_1000km: number
+}
+const upkeep = ref<Upkeep | null>(null)
+
 async function loadFleet() {
   const [f, tr, d] = await Promise.allSettled([api.get('/fleet'), api.get('/trailers'), api.get('/drivers')])
-  if (f.status === 'fulfilled') vehicles.value = f.value.data.data
+  if (f.status === 'fulfilled') {
+    vehicles.value = f.value.data.data
+    if (f.value.data.upkeep) upkeep.value = f.value.data.upkeep
+  }
   if (tr.status === 'fulfilled') trailers.value = tr.value.data.data
   if (d.status === 'fulfilled') drivers.value = d.value.data.data
   void loadEstimate()
@@ -138,9 +149,21 @@ function costBreakdown(c: Contract) {
   const avgToll = ((c.origin?.toll_per_km ?? 0) + (c.destination?.toll_per_km ?? 0)) / 2
   const toll = Math.round(dist * avgToll * 100)
   const m = estFuelModel(c)
-  const fuel = m ? Math.round(dist * (m.fuel_economy || 0) * (c.origin?.fuel_price ?? 0) * 100) : 0
-  const expenses = tax + toll + fuel
-  return { tax, toll, fuel, expenses, profit: (c.payout || 0) - expenses, hasVehicle: !!m }
+
+  // Service & fuel auto-charged on arrival: fuel + repair + oil + battery,
+  // matching GarageService::serviceOnArrival (all figures in cents).
+  const fuelOnly = m ? dist * (m.fuel_economy || 0) * (c.origin?.fuel_price ?? 0) * 100 : 0
+  const u = upkeep.value
+  const wear = u
+    ? (dist / 1000) * (u.condition_loss_per_1000km * u.repair_cost_per_point
+        + u.tire_loss_per_1000km * u.tire_cost_per_point
+        + (u.oil_loss_per_1000km / 100) * u.oil_change_cost
+        + (u.battery_loss_per_1000km / 100) * u.battery_cost)
+    : 0
+  const service = Math.round(fuelOnly + (m ? wear : 0))
+
+  const expenses = tax + toll + service
+  return { tax, toll, service, expenses, profit: (c.payout || 0) - expenses, hasVehicle: !!m }
 }
 
 const servicingAll = ref(false)
@@ -292,8 +315,8 @@ onUnmounted(() => clearInterval(poll))
             <span class="font-mono text-gold font-semibold">{{ credits(c.payout) }}</span>
           </div>
           <div class="flex items-center justify-between text-[12px] text-slate-400">
-            <span>Fuel {{ costBreakdown(c).hasVehicle ? '(est.)' : '' }}</span>
-            <span class="font-mono">{{ costBreakdown(c).hasVehicle ? '−' + credits(costBreakdown(c).fuel) : 'pick a truck' }}</span>
+            <span>Service &amp; fuel {{ costBreakdown(c).hasVehicle ? '(est.)' : '' }}</span>
+            <span class="font-mono">{{ costBreakdown(c).hasVehicle ? '−' + credits(costBreakdown(c).service) : 'pick a truck' }}</span>
           </div>
           <div class="flex items-center justify-between text-[12px] text-slate-400">
             <span>Tolls</span>

@@ -276,6 +276,7 @@ class EconomyService
     protected function mintContract(City $origin, Commodity $commodity, Collection $cities, array $priceLookup, Collection $events): ?Contract
     {
         $cfg = config('transoria.contracts');
+        $cfgShip = config('transoria.shipment');
         $originPrice = $priceLookup[$commodity->id][$origin->id] ?? $commodity->base_price;
 
         // Find the best consumer: highest local price, not the origin.
@@ -351,10 +352,19 @@ class EconomyService
         $avgToll = (($origin->toll_per_km ?? 0) + ($best->toll_per_km ?? 0)) / 2;
         $tollExpense = $distance * $avgToll;
         $fuelExpense = $distance * 0.30 * ($origin->fuel_price ?? 1.0); // representative truck
+        // Per-trip upkeep auto-charged on arrival (repair + tyres + oil + battery),
+        // in ₹ — costs are stored in cents so divide by 100.
+        $g = config('transoria.garage');
+        $upkeepExpense = $distance / 1000 * (
+            $cfgShip['condition_loss_per_1000km'] * ($g['repair_cost_per_point'] / 100)
+            + $cfgShip['tire_loss_per_1000km'] * ($g['tire_cost_per_point'] / 100)
+            + ($g['oil_loss_per_1000km'] / 100) * ($g['oil_change_cost'] / 100)
+            + ($g['battery_loss_per_1000km'] / 100) * ($g['battery_cost'] / 100)
+        );
         $taxRate = (float) ($best->tax_rate ?? 0);
-        $marginTarget = 0.20; // want ≥20% net after tax, tolls & fuel
+        $marginTarget = 0.20; // want ≥20% net after tax, tolls, fuel & upkeep
         $denom = max(0.15, 1 - $taxRate - $marginTarget);
-        $minProfitable = ($tollExpense + $fuelExpense) / $denom;
+        $minProfitable = ($tollExpense + $fuelExpense + $upkeepExpense) / $denom;
         $payout = max($payout, $minProfitable);
 
         $payoutCents = (int) round($payout * 100);

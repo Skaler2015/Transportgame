@@ -191,6 +191,56 @@ class GarageService
     }
 
     /**
+     * Auto service & refuel a truck the moment a run ends. Unlike a manual full
+     * service (which charges the FLAT oil/battery fees), this charges upkeep
+     * PROPORTIONALLY to what the trip actually consumed — a small oil/battery
+     * top-up costs a small fraction of the full fee — so upkeep is a modest
+     * per-trip line item, never a lump sum. Best-effort: if cash is short it
+     * skips (cost 0) rather than failing the caller.
+     *
+     * @return array{vehicle: Vehicle, cost: int}
+     */
+    public function serviceOnArrival(Company $company, Vehicle $vehicle): array
+    {
+        $vehicle->loadMissing('model', 'city');
+        $g = config('transoria.garage');
+
+        $repairCost = (100 - $vehicle->condition) * $g['repair_cost_per_point']
+            + $vehicle->tire_wear * $g['tire_cost_per_point'];
+        // Proportional to the charge/oil actually used this trip (we top back to
+        // 100), so a 20%-drained tank of oil costs 20% of a full oil change.
+        $oilCost = (100 - $vehicle->oil_level) / 100 * $g['oil_change_cost'];
+        $battCost = (100 - $vehicle->battery) / 100 * $g['battery_cost'];
+
+        $capacity = (float) ($vehicle->model->fuel_capacity ?? 0);
+        $room = max(0, $capacity - $vehicle->fuel);
+        $pricePerLitre = $vehicle->city->fuel_price ?? $company->headquarters?->fuel_price ?? 1.0;
+        $fuelCost = $room * $pricePerLitre * 100;
+
+        $total = (int) round($repairCost + $oilCost + $battCost + $fuelCost);
+        if ($total <= 0 || $company->cash < $total) {
+            return ['vehicle' => $vehicle, 'cost' => 0];
+        }
+
+        $this->ledger->post($company, LedgerEntry::CAT_UPKEEP,
+            "Service & refuel: {$vehicle->model->name}", -$total, $vehicle);
+
+        $vehicle->condition = 100;
+        $vehicle->tire_wear = 0;
+        $vehicle->oil_level = 100;
+        $vehicle->battery = 100;
+        if ($capacity > 0) {
+            $vehicle->fuel = $capacity;
+        }
+        if ($vehicle->status === Vehicle::STATUS_MAINTENANCE) {
+            $vehicle->status = Vehicle::STATUS_IDLE;
+        }
+        $vehicle->save();
+
+        return ['vehicle' => $vehicle, 'cost' => $total];
+    }
+
+    /**
      * The cost of fully servicing + refuelling a single vehicle right now,
      * without charging. Mirrors {@see fullService()}'s pricing exactly.
      */

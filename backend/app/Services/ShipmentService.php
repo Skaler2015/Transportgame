@@ -346,13 +346,9 @@ class ShipmentService
             // skip it (the truck can be serviced manually) rather than fail the run.
             $serviceCost = 0;
             if (config('transoria.shipment.auto_service_on_arrival', true)) {
-                try {
-                    $result = $this->garage->fullService($company, $vehicle->fresh(['model', 'city']));
-                    $serviceCost = (int) $result['cost'];
-                    $vehicle = $result['vehicle'];
-                } catch (RuntimeException $e) {
-                    // Nothing to service, or not enough cash — leave as-is.
-                }
+                $result = $this->garage->serviceOnArrival($company, $vehicle->fresh(['model', 'city']));
+                $serviceCost = (int) $result['cost'];
+                $vehicle = $result['vehicle'];
             }
 
             // Release the trailer back to the yard at the destination, with wear.
