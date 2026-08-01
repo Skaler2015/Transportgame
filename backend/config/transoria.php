@@ -9,6 +9,13 @@
  */
 return [
 
+    // Deploy/schema signature. Bump this string whenever a release adds a
+    // migration or changes seeded world data. On the first web request after a
+    // deploy the app notices the stored marker no longer matches and runs
+    // `migrate --force` + `transoria:worldsync` once, so shared hosts that
+    // never run the CLI still stay fully migrated. See EnsureSchemaUpToDate.
+    'schema_version' => '2026.08.01-country',
+
     // In-game currency label.
     'currency' => ['code' => 'CR', 'symbol' => '₡', 'name' => 'Credits'],
 

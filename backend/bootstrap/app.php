@@ -13,7 +13,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Self-healing deploy migration: on the first request after a deploy,
+        // apply any pending migrations + world sync so shared hosts that never
+        // run Artisan stay up to date. Cheap no-op once the marker matches.
+        $middleware->append(\App\Http\Middleware\EnsureSchemaUpToDate::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
