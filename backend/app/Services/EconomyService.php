@@ -294,15 +294,7 @@ class EconomyService
         $targetTonnes = $lo + (mt_rand() / mt_getrandmax()) * ($hi - $lo);
         $units = max(1, (int) round($targetTonnes / max(0.05, $commodity->weight_per_unit)));
 
-        $cargoValue = $commodity->base_price * $units;
-        $freight = $distance * $units * $commodity->weight_per_unit * 0.020;
-        $spreadValue = max(0, $bestSpread) * $units;
-
         $isRush = random_int(1, 100) <= 22;
-        $margin = $cfg['base_margin'] + ($isRush ? $cfg['rush_margin_bonus'] : 0);
-
-        // Payout in ₡ then convert to cents.
-        $payout = ($cargoValue * $margin) + $freight + $spreadValue * 0.5;
 
         // Difficulty from distance, risk, hazmat.
         $difficulty = 1;
@@ -312,7 +304,18 @@ class EconomyService
         $difficulty += $isRush ? 1 : 0;
         $difficulty = min(5, $difficulty);
 
-        $payout *= 1 + ($difficulty - 1) * 0.12;
+        // Freight is priced PER KILOMETRE at a random ₹4–7/km, with a rush
+        // premium and a small difficulty bump. Distance is the main driver.
+        $rateLo = (float) ($cfg['rate_per_km_min'] ?? 4.0);
+        $rateHi = (float) ($cfg['rate_per_km_max'] ?? 7.0);
+        $ratePerKm = $rateLo + (mt_rand() / mt_getrandmax()) * ($rateHi - $rateLo);
+
+        $payout = $distance * $ratePerKm;
+        if ($isRush) {
+            $payout *= 1 + $cfg['rush_margin_bonus'];
+        }
+        $payout *= 1 + ($difficulty - 1) * 0.06;
+
         $payoutCents = (int) round($payout * 100);
         // No job pays under the configured floor.
         $payoutCents = max((int) ($cfg['min_payout'] ?? 0), $payoutCents);
