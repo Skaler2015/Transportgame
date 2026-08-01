@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\ResolvesCompany;
 use App\Http\Controllers\Controller;
+use App\Models\LedgerEntry;
 use App\Models\ListedCompany;
 use App\Models\ShareHolding;
 use App\Services\StockService;
@@ -39,14 +40,22 @@ class StockController extends Controller
                 'shares_held' => $h ? (int) $h->shares : 0,
                 'avg_cost' => $h ? (float) $h->avg_cost : 0,
                 'position_value' => $h ? round($h->shares * $lc->share_price, 2) : 0,
+                'history' => array_map(fn ($p) => round((float) $p, 2), $lc->price_history ?? []),
             ];
         });
 
         $portfolioCents = $this->stocks->portfolioValueCents($company);
+        // Cost basis of open positions (cents) and lifetime dividends received.
+        $investedCents = (int) round((float) ShareHolding::where('company_id', $company->id)
+            ->where('shares', '>', 0)->get()->sum(fn ($h) => $h->shares * $h->avg_cost) * 100);
+        $dividendsCents = (int) LedgerEntry::where('company_id', $company->id)
+            ->where('description', 'like', 'Dividend:%')->sum('amount');
 
         return response()->json([
             'data' => $rows,
             'portfolio_value' => $portfolioCents,
+            'invested' => $investedCents,
+            'dividends_earned' => $dividendsCents,
         ]);
     }
 

@@ -13,6 +13,7 @@ class ListedCompany extends Model
         'share_price' => 'float',
         'dividend_yield' => 'float',
         'volatility' => 'float',
+        'price_history' => 'array',
     ];
 
     /** Percentage change vs the reference base price. */

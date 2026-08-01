@@ -45,6 +45,12 @@ class StockService
             $price = max($lc->base_price * $cfg['price_floor_mult'], min($lc->base_price * $cfg['price_ceiling_mult'], $price));
 
             $lc->share_price = round($price, 2);
+
+            // Keep a rolling window of recent prices for the sparkline/chart.
+            $hist = $lc->price_history ?? [];
+            $hist[] = round($price, 2);
+            $lc->price_history = array_slice($hist, -30);
+
             $lc->save();
         }
     }

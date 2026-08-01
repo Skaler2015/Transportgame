@@ -273,6 +273,7 @@ export interface Stock {
   shares_held: number
   avg_cost: number
   position_value: number
+  history: number[]
 }
 
 export interface Dashboard {
