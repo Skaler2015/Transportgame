@@ -3,7 +3,7 @@ import { onMounted, ref, computed } from 'vue'
 import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
-import { credits, num } from '../utils/format'
+import { credits, num, cur } from '../utils/format'
 
 const game = useGameStore()
 const toast = useToastStore()
@@ -93,9 +93,9 @@ onMounted(async () => { await game.loadReference().catch(() => {}); await load()
         <div v-if="w.inventory.length" class="mt-3 space-y-1.5">
           <div v-for="row in w.inventory" :key="row.commodity_id" class="flex items-center justify-between text-xs bg-ink-900/50 rounded-lg px-3 py-2">
             <span class="font-medium">{{ row.commodity }}</span>
-            <span class="text-slate-400">{{ num(row.units) }} u @ ₡{{ num(row.avg_unit_cost, 2) }}</span>
+            <span class="text-slate-400">{{ num(row.units) }} u @ {{ cur() }}{{ num(row.avg_unit_cost, 2) }}</span>
             <span class="font-mono" :class="row.unrealized >= 0 ? 'text-gain' : 'text-loss'">
-              {{ row.unrealized >= 0 ? '+' : '' }}₡{{ num(row.unrealized, 0) }}
+              {{ row.unrealized >= 0 ? '+' : '' }}{{ cur() }}{{ num(row.unrealized, 0) }}
             </span>
           </div>
         </div>

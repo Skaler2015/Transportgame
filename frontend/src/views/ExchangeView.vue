@@ -3,7 +3,7 @@ import { onMounted, ref, computed } from 'vue'
 import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
-import { credits, num } from '../utils/format'
+import { credits, num, cur } from '../utils/format'
 
 const game = useGameStore()
 const toast = useToastStore()
@@ -75,7 +75,7 @@ onMounted(async () => { await game.loadReference().catch(() => {}); await load()
           <input v-model.number="form.units" type="number" min="1" class="input !py-1.5 text-xs mt-1" />
         </div>
         <div>
-          <label class="stat-label">₡ / unit</label>
+          <label class="stat-label">{{ cur() }} / unit</label>
           <input v-model.number="form.price_per_unit" type="number" min="0.01" step="0.01" class="input !py-1.5 text-xs mt-1" />
         </div>
         <button class="btn-primary !py-2" :disabled="busy" @click="create">List</button>
@@ -88,7 +88,7 @@ onMounted(async () => { await game.loadReference().catch(() => {}); await load()
       <h2 class="font-semibold mb-2">Your listings</h2>
       <div class="glass divide-y divide-white/5">
         <div v-for="l in mine" :key="l.id" class="flex items-center justify-between px-4 py-3 text-sm">
-          <span>{{ num(l.units) }}× {{ l.commodity }} @ ₡{{ num(l.price_per_unit, 2) }} · {{ l.city }}</span>
+          <span>{{ num(l.units) }}× {{ l.commodity }} @ {{ cur() }}{{ num(l.price_per_unit, 2) }} · {{ l.city }}</span>
           <div class="flex items-center gap-3">
             <span class="font-mono text-gold">{{ credits(l.total) }}</span>
             <button class="btn-ghost !py-1 text-xs" :disabled="busy" @click="cancel(l)">Cancel</button>
@@ -106,7 +106,7 @@ onMounted(async () => { await game.loadReference().catch(() => {}); await load()
             <p class="font-semibold text-sm">{{ l.commodity }}</p>
             <span class="text-[11px] text-slate-400">{{ l.city }}</span>
           </div>
-          <p class="text-[11px] text-slate-400 mt-0.5">{{ num(l.units) }} units · ₡{{ num(l.price_per_unit, 2) }}/unit · by {{ l.seller }}</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">{{ num(l.units) }} units · {{ cur() }}{{ num(l.price_per_unit, 2) }}/unit · by {{ l.seller }}</p>
           <div class="flex items-center justify-between mt-3">
             <span class="font-mono text-gold font-semibold">{{ credits(l.total) }}</span>
             <button v-if="!l.is_mine" class="btn-primary !py-1.5" :disabled="busy" @click="buy(l)">Buy</button>

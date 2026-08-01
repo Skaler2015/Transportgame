@@ -8,7 +8,7 @@ import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
-import { num } from '../utils/format'
+import { num, cur } from '../utils/format'
 
 ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Filler)
 
@@ -66,7 +66,7 @@ const chartData = computed(() => ({
 }))
 const chartOptions: any = {
   responsive: true, maintainAspectRatio: false,
-  plugins: { tooltip: { callbacks: { label: (c: { raw: unknown }) => '₡' + c.raw } } },
+  plugins: { tooltip: { callbacks: { label: (c: { raw: unknown }) => cur() + c.raw } } },
   scales: {
     x: { display: false },
     y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } },
@@ -96,17 +96,17 @@ onMounted(async () => {
       <div class="glass p-4">
         <p class="stat-label">Best place to buy</p>
         <p class="text-lg font-semibold mt-1">{{ bestBuy?.city }}</p>
-        <p class="font-mono text-gain">₡{{ num(bestBuy?.price ?? 0, 2) }}</p>
+        <p class="font-mono text-gain">{{ cur() }}{{ num(bestBuy?.price ?? 0, 2) }}</p>
       </div>
       <div class="glass p-4">
         <p class="stat-label">Best place to sell</p>
         <p class="text-lg font-semibold mt-1">{{ bestSell?.city }}</p>
-        <p class="font-mono text-gold">₡{{ num(bestSell?.price ?? 0, 2) }}</p>
+        <p class="font-mono text-gold">{{ cur() }}{{ num(bestSell?.price ?? 0, 2) }}</p>
       </div>
       <div class="glass p-4">
         <p class="stat-label">Arbitrage spread</p>
-        <p class="text-lg font-semibold mt-1">₡{{ num((bestSell?.price ?? 0) - (bestBuy?.price ?? 0), 2) }} / unit</p>
-        <p class="text-[11px] text-slate-400">Base price ₡{{ num(basePrice, 2) }}</p>
+        <p class="text-lg font-semibold mt-1">{{ cur() }}{{ num((bestSell?.price ?? 0) - (bestBuy?.price ?? 0), 2) }} / unit</p>
+        <p class="text-[11px] text-slate-400">Base price {{ cur() }}{{ num(basePrice, 2) }}</p>
       </div>
     </div>
 
@@ -120,7 +120,7 @@ onMounted(async () => {
             <div class="flex justify-between text-[11px] mb-0.5">
               <span :class="historyCity === m.city_id ? 'text-brand font-semibold' : 'text-slate-300'">{{ m.city }}</span>
               <span class="font-mono" :class="m.delta_pct >= 0 ? 'text-gain' : 'text-loss'">
-                ₡{{ num(m.price, 2) }} ({{ m.delta_pct >= 0 ? '+' : '' }}{{ m.delta_pct }}%)
+                {{ cur() }}{{ num(m.price, 2) }} ({{ m.delta_pct >= 0 ? '+' : '' }}{{ m.delta_pct }}%)
               </span>
             </div>
             <div class="h-2 rounded-full bg-ink-700 overflow-hidden">

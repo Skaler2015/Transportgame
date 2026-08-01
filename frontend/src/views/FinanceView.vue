@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
-import { credits } from '../utils/format'
+import { credits, cur } from '../utils/format'
 
 const game = useGameStore()
 const toast = useToastStore()
@@ -58,7 +58,7 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
       <h2 class="font-semibold mb-3">Take a loan</h2>
       <div class="flex flex-wrap items-end gap-3">
         <div class="flex-1 min-w-[200px]">
-          <label class="stat-label">Amount (₡)</label>
+          <label class="stat-label">Amount ({{ cur() }})</label>
           <input v-model.number="borrowAmount" type="number" min="500" step="500" class="input mt-1" />
         </div>
         <button class="btn-primary" :disabled="busy" @click="borrow">Borrow</button>
@@ -75,7 +75,7 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
             <p class="text-sm">Balance <span class="font-mono text-loss">{{ credits(l.balance) }}</span></p>
             <p class="text-[11px] text-slate-500">Principal {{ credits(l.principal) }}</p>
           </div>
-          <input v-model.number="repay[l.id]" type="number" min="1" placeholder="₡ to repay" class="input !py-1.5 text-xs w-36" />
+          <input v-model.number="repay[l.id]" type="number" min="1" :placeholder="cur() + ' to repay'" class="input !py-1.5 text-xs w-36" />
           <button class="btn-ghost !py-1.5 text-xs" @click="doRepay(l)">Repay</button>
         </div>
       </div>

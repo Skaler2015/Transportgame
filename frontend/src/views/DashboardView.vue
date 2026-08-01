@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useGameStore } from '../stores/game'
 import { useClock } from '../composables/useClock'
-import { credits, num } from '../utils/format'
+import { credits, num, cur } from '../utils/format'
 import StatTile from '../components/StatTile.vue'
 import ShipmentRow from '../components/ShipmentRow.vue'
 import PnlDonut from '../components/PnlDonut.vue'
@@ -41,7 +41,7 @@ const CATEGORY_LABEL: Record<string, string> = {
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       <StatTile label="Company Value" :value="credits(c?.value ?? 0, { compact: true })" accent="brand" icon="◈"
         :sub="`Level ${c?.level} · ${num(c?.research_points ?? 0)} RP`" />
-      <StatTile label="Cash on Hand" :value="credits(c?.cash ?? 0)" accent="gold" icon="₡"
+      <StatTile label="Cash on Hand" :value="credits(c?.cash ?? 0)" accent="gold" :icon="cur()"
         :sub="`Debt ${credits(c?.debt ?? 0)}`" />
       <StatTile label="Net P&L" :value="credits(netProfit, { sign: true, compact: true })"
         :accent="netProfit >= 0 ? 'gain' : 'loss'" icon="↭"

@@ -1,13 +1,26 @@
-// Money is stored as integer CENTS of the Credit (₡). These helpers convert
-// to display strings so no component does raw math on currency.
+// Money is stored as integer minor units. These helpers convert to display
+// strings so no component does raw math on currency. The symbol reflects the
+// player's country and is set once the company loads (setCurrencySymbol).
+
+let _symbol = '₹'
+
+/** Set the active currency symbol (called when the company loads/changes). */
+export function setCurrencySymbol(symbol?: string): void {
+  if (symbol) _symbol = symbol
+}
+
+/** The active currency symbol, for templates that render prices directly. */
+export function cur(): string {
+  return _symbol
+}
 
 export function credits(cents: number, opts: { sign?: boolean; compact?: boolean } = {}): string {
   const value = cents / 100
   const sign = opts.sign && value > 0 ? '+' : ''
-  if (opts.compact) {
-    return sign + '₡' + compactNumber(value)
-  }
-  return sign + '₡' + value.toLocaleString(undefined, { maximumFractionDigits: 0 })
+  const body = opts.compact
+    ? compactNumber(value)
+    : value.toLocaleString(undefined, { maximumFractionDigits: 0 })
+  return sign + _symbol + body
 }
 
 export function compactNumber(n: number): string {

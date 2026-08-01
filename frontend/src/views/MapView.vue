@@ -5,7 +5,7 @@ import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
 import type { Shipment } from '../types'
-import { credits, WEATHER_ICON } from '../utils/format'
+import { credits, WEATHER_ICON, cur } from '../utils/format'
 
 const game = useGameStore()
 const toast = useToastStore()
@@ -46,7 +46,7 @@ function drawCities() {
       fillOpacity: 0.35,
     })
       .bindTooltip(
-        `<b>${c.name}</b><br>${c.region} · pop ${(c.population / 1e6).toFixed(1)}M<br>${WEATHER_ICON[c.weather] || ''} fuel ₡${c.fuel_price}`,
+        `<b>${c.name}</b><br>${c.region} · pop ${(c.population / 1e6).toFixed(1)}M<br>${WEATHER_ICON[c.weather] || ''} fuel ${cur()}${c.fuel_price}`,
         { direction: 'top' },
       )
       .addTo(map.value)

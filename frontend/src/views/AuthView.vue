@@ -134,7 +134,7 @@ const features = [
         </form>
 
         <p v-if="mode === 'register'" class="text-[11px] text-slate-500 mt-4 text-center">
-          You'll start with ₡250,000, a garage, one mini-hauler and a driver.
+          You'll start with 250,000 in cash, a garage, one mini-hauler and a driver.
         </p>
       </div>
     </div>

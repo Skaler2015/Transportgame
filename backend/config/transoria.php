@@ -23,6 +23,15 @@ return [
     ],
     'default_country' => 'IN',
 
+    // Each country's real currency. Money is stored on the same numeric scale
+    // everywhere (game balance); only the display symbol/code changes.
+    'country_currency' => [
+        'IN' => ['symbol' => '₹', 'code' => 'INR'],
+        'US' => ['symbol' => '$', 'code' => 'USD'],
+        'GB' => ['symbol' => '£', 'code' => 'GBP'],
+        'AE' => ['symbol' => 'د.إ ', 'code' => 'AED'],
+    ],
+
     // Starting loadout for a brand-new company.
     'starter' => [
         'cash' => 250_000_00,        // ₡2,500.00 in cents (stored *100)

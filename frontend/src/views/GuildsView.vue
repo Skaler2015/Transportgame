@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
-import { credits, num } from '../utils/format'
+import { credits, num, cur } from '../utils/format'
 
 const game = useGameStore()
 const toast = useToastStore()
@@ -58,7 +58,7 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
 
       <div class="mt-4 flex flex-wrap items-end gap-3">
         <div class="flex-1 min-w-[160px]">
-          <label class="stat-label">Contribute to treasury (₡)</label>
+          <label class="stat-label">Contribute to treasury ({{ cur() }})</label>
           <input v-model.number="contribution" type="number" min="1" class="input mt-1" />
         </div>
         <button class="btn-ghost" :disabled="busy" @click="contribute">Contribute</button>
