@@ -75,6 +75,7 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <Teleport to="body">
   <Transition name="install">
     <div v-if="show" class="install-wrap fixed inset-x-0 z-[1200] p-3">
       <div
@@ -109,6 +110,7 @@ onUnmounted(() => {
       </div>
     </div>
   </Transition>
+  </Teleport>
 </template>
 
 <style scoped>

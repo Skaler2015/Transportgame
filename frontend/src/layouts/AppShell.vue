@@ -182,33 +182,39 @@ async function logout() {
       </main>
     </div>
 
-    <!-- Mobile bottom tab bar (hidden on lg where the sidebar shows) -->
-    <nav
-      class="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-ink-950/90 backdrop-blur-xl"
-      style="padding-bottom: env(safe-area-inset-bottom)"
-    >
-      <div class="grid grid-cols-5">
-        <RouterLink
-          v-for="item in bottomNav"
-          :key="item.to"
-          :to="item.to"
-          class="flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium text-slate-400 transition"
-          active-class="!text-brand"
-        >
-          <span class="text-xl leading-none">{{ item.icon }}</span>
-          {{ item.label }}
-        </RouterLink>
-        <button
-          class="flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium text-slate-400 transition active:text-brand"
-          @click="mobileOpen = true"
-        >
-          <span class="text-xl leading-none">☰</span>
-          More
-        </button>
-      </div>
-    </nav>
+    <!-- Mobile bottom tab bar (hidden on lg where the sidebar shows).
+         Teleported to <body> so `position: fixed` is relative to the viewport
+         and never trapped by a transformed/filtered ancestor (which would make
+         it scroll away with the page). -->
+    <Teleport to="body">
+      <nav
+        class="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-ink-950/95 backdrop-blur-xl"
+        style="padding-bottom: env(safe-area-inset-bottom)"
+      >
+        <div class="grid grid-cols-5">
+          <RouterLink
+            v-for="item in bottomNav"
+            :key="item.to"
+            :to="item.to"
+            class="flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium text-slate-400 transition"
+            active-class="!text-brand"
+          >
+            <span class="text-xl leading-none">{{ item.icon }}</span>
+            {{ item.label }}
+          </RouterLink>
+          <button
+            class="flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium text-slate-400 transition active:text-brand"
+            @click="mobileOpen = true"
+          >
+            <span class="text-xl leading-none">☰</span>
+            More
+          </button>
+        </div>
+      </nav>
+    </Teleport>
 
-    <!-- Mobile navigation drawer -->
+    <!-- Mobile navigation drawer (teleported for the same reason) -->
+    <Teleport to="body">
     <Transition name="fade">
       <div v-if="mobileOpen" class="fixed inset-0 z-50 lg:hidden" @click="mobileOpen = false">
         <div class="absolute inset-0 bg-ink-950/70 backdrop-blur-sm" />
@@ -245,6 +251,7 @@ async function logout() {
         </aside>
       </div>
     </Transition>
+    </Teleport>
   </div>
 </template>
 
