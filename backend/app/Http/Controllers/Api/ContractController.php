@@ -110,11 +110,14 @@ class ContractController extends Controller
 
         if ($wantBackhaul) {
             $contracts = $contracts->filter(fn (Contract $c) => $c->at_fleet_city);
-        } else {
-            // Otherwise just float backhaul jobs to the top, keeping the chosen
-            // sort order within each group.
-            $contracts = $contracts->sortByDesc(fn (Contract $c) => $c->at_fleet_city ? 1 : 0);
         }
+
+        // Float jobs to the top by proximity of a truck: "Truck here" (idle at
+        // origin) first, then "Truck arriving" (en route), then everything else —
+        // keeping the chosen sort order within each group (stable in PHP 8+).
+        $contracts = $contracts->sortByDesc(
+            fn (Contract $c) => $c->at_fleet_city ? ($c->fleet_arriving ? 1 : 2) : 0
+        );
 
         return ContractResource::collection($contracts->take(60)->values());
     }
