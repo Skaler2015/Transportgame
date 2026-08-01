@@ -487,6 +487,39 @@ onUnmounted(() => clearInterval(poll))
       <span class="text-xs text-brand-soft shrink-0">Tap to fix →</span>
     </button>
 
+    <!-- Mobile: compact On-the-Road summary, right above the contracts.
+         Totals at a glance; tap to expand the full route list. -->
+    <details v-if="onTheRoad.length" class="lg:hidden glass !p-3">
+      <summary class="flex items-center justify-between gap-2 cursor-pointer list-none">
+        <span class="text-sm font-semibold">
+          On the Road <span class="chip bg-brand/15 text-brand-soft ml-1">{{ onTheRoad.length }}</span>
+        </span>
+        <span class="font-mono text-xs" :class="roadTotals.profit >= 0 ? 'text-gain' : 'text-loss'">
+          {{ credits(roadTotals.profit) }} profit
+        </span>
+      </summary>
+      <div class="grid grid-cols-2 gap-x-3 gap-y-1 mt-2.5 text-[11px]">
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">Value</span>
+          <span class="font-mono text-gold font-semibold">{{ credits(roadTotals.value) }}</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">Longest</span>
+          <span class="font-mono text-slate-200 font-semibold">⏱ {{ maxTimeLeft }}</span>
+        </div>
+        <div class="flex items-center justify-between col-span-2 border-t border-white/10 pt-1">
+          <span class="text-slate-400">Cash after these land</span>
+          <span class="font-mono text-brand-soft font-semibold">{{ credits(projectedCash) }}</span>
+        </div>
+      </div>
+      <div class="divide-y divide-white/5 mt-2 max-h-52 overflow-y-auto">
+        <div v-for="s in onTheRoad" :key="s.id" class="py-1.5 flex items-center justify-between gap-2">
+          <span class="text-[11px] font-medium truncate">{{ s.contract?.origin?.name }} → {{ s.contract?.destination?.name }}</span>
+          <span class="font-mono text-[10px] shrink-0" :class="etaLeft(s) === 'arriving…' ? 'text-gain' : 'text-brand-soft'">⏱ {{ etaLeft(s) }}</span>
+        </div>
+      </div>
+    </details>
+
     <div v-if="loading" class="grid place-items-center h-64 text-slate-500">Loading market…</div>
 
     <!-- Compact, sortable contract table. Click a row's GO to dispatch. -->
@@ -651,9 +684,10 @@ onUnmounted(() => clearInterval(poll))
    </div>
 
    <!-- Live fleet side panel -->
-   <aside class="lg:w-80 shrink-0 space-y-4 lg:sticky lg:top-20">
-     <!-- On the road: route + time left, soonest first -->
-     <div class="glass p-4">
+   <aside class="lg:w-96 shrink-0 space-y-4 lg:sticky lg:top-20">
+     <!-- On the road: route + time left, soonest first (desktop; mobile uses
+          the compact summary above the contracts instead). -->
+     <div class="hidden lg:block glass p-4">
        <h3 class="font-semibold text-sm mb-2">
          On the Road <span class="chip bg-brand/15 text-brand-soft ml-1">{{ onTheRoad.length }}</span>
        </h3>
