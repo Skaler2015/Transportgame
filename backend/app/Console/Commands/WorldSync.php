@@ -5,9 +5,11 @@ namespace App\Console\Commands;
 use App\Models\City;
 use App\Models\Company;
 use App\Models\Contract;
+use App\Models\Vehicle;
 use App\Services\CompanyService;
 use Database\Seeders\CitySeeder;
 use Database\Seeders\CommoditySeeder;
+use Database\Seeders\TrailerModelSeeder;
 use Database\Seeders\VehicleModelSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -31,10 +33,11 @@ class WorldSync extends Command
 
     public function handle(CompanyService $companies): int
     {
-        $this->info('Seeding commodities, cities and vehicles…');
+        $this->info('Seeding commodities, cities, vehicles and trailers…');
         (new CommoditySeeder)->run();
         (new CitySeeder)->run();
         (new VehicleModelSeeder)->run();
+        (new TrailerModelSeeder)->run();
 
         // 1. Neutralise legacy fictional cities (those with no real country).
         $legacyIds = City::whereNull('country')->pluck('id');
@@ -67,6 +70,30 @@ class WorldSync extends Command
         });
 
         $this->info("Relocated {$moved} companies onto real cities.");
+
+        // 4. Trailer + fuel groundwork for the haulage model. Give every company
+        //    a starter trailer (if it has none) so its tractors can haul, and
+        //    top up any empty idle tank once so nobody is stranded on rollout.
+        $trailered = 0;
+        Company::with('headquarters')->chunkById(200, function ($batch) use ($companies, &$trailered) {
+            foreach ($batch as $company) {
+                if ($companies->grantStarterTrailer($company, $company->headquarters)) {
+                    $trailered++;
+                }
+            }
+        });
+        $this->info("Granted starter trailers to {$trailered} companies.");
+
+        $fuelled = Vehicle::whereHas('model', fn ($q) => $q->where('fuel_capacity', '>', 0))
+            ->where('status', Vehicle::STATUS_IDLE)
+            ->where('fuel', '<=', 0)
+            ->get()
+            ->each(function (Vehicle $v) {
+                $v->update(['fuel' => $v->model->fuel_capacity]);
+            })
+            ->count();
+        $this->info("Topped up {$fuelled} empty tanks.");
+
         $this->info('World sync complete.');
 
         return self::SUCCESS;

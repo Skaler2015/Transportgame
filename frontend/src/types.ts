@@ -66,6 +66,8 @@ export interface VehicleModel {
   name: string
   brand: string
   class: string
+  mode: string // road | rail | sea | air
+  needs_trailer: boolean
   price: number
   capacity_weight: number
   capacity_volume: number
@@ -91,9 +93,37 @@ export interface Vehicle {
   condition: number
   tire_wear: number
   fuel: number
+  fuel_capacity?: number
+  fuel_pct?: number
   odometer: number
   available: boolean
   model?: VehicleModel
+  city?: City
+}
+
+export interface TrailerModel {
+  id: number
+  key: string
+  name: string
+  type: string // box | reefer | tanker | flatbed | container | car_carrier
+  price: number
+  capacity_weight: number
+  capacity_volume: number
+  can_reefer: boolean
+  can_tanker: boolean
+  can_hazmat: boolean
+  unlock_level: number
+  locked: boolean
+  affordable: boolean
+}
+
+export interface Trailer {
+  id: number
+  nickname: string | null
+  status: string
+  condition: number
+  available: boolean
+  model?: TrailerModel
   city?: City
 }
 
@@ -146,6 +176,7 @@ export interface Shipment {
   event_log: { at: string; text: string }[] | null
   contract?: Contract
   vehicle?: Vehicle
+  trailer?: Trailer
   driver?: Driver
 }
 

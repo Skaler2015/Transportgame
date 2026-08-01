@@ -19,6 +19,7 @@ class VehicleModel extends Model
         'can_reefer' => 'boolean',
         'can_tanker' => 'boolean',
         'can_hazmat' => 'boolean',
+        'needs_trailer' => 'boolean',
         'reliability' => 'float',
         'upgrade_slots' => 'integer',
         'unlock_level' => 'integer',

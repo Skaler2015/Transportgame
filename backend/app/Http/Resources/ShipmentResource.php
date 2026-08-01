@@ -27,6 +27,7 @@ class ShipmentResource extends JsonResource
             'event_log' => $this->event_log,
             'contract' => new ContractResource($this->whenLoaded('contract')),
             'vehicle' => new VehicleResource($this->whenLoaded('vehicle')),
+            'trailer' => new TrailerResource($this->whenLoaded('trailer')),
             'driver' => new DriverResource($this->whenLoaded('driver')),
         ];
     }

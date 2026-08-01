@@ -41,7 +41,7 @@ class CompanyController extends Controller
 
         $activeShipments = Shipment::where('company_id', $company->id)
             ->where('status', Shipment::STATUS_EN_ROUTE)
-            ->with(['contract.commodity', 'contract.origin', 'contract.destination', 'vehicle.model', 'driver'])
+            ->with(['contract.commodity', 'contract.origin', 'contract.destination', 'vehicle.model', 'trailer.model', 'driver'])
             ->orderBy('eta_at')
             ->get();
 

@@ -53,4 +53,22 @@ class FleetController extends Controller
         return (new VehicleResource($vehicle->load('model', 'city')))
             ->response()->setStatusCode(201);
     }
+
+    /** Refuel a vehicle at the local pump, charging cash at the fuel price. */
+    public function refuel(Request $request, Vehicle $vehicle)
+    {
+        $company = $this->company($request);
+
+        $data = $request->validate([
+            'liters' => ['nullable', 'numeric', 'min:1'],
+        ]);
+
+        try {
+            $vehicle = $this->companies->refuelVehicle($company, $vehicle, $data['liters'] ?? null);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return new VehicleResource($vehicle->load('model', 'city'));
+    }
 }

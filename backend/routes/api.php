@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\MarketController;
 use App\Http\Controllers\Api\MissionController;
 use App\Http\Controllers\Api\ResearchController;
 use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\Api\TrailerController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\WorldController;
 use Illuminate\Support\Facades\Route;
@@ -66,6 +67,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/fleet', [FleetController::class, 'index']);
     Route::get('/dealership', [FleetController::class, 'dealership']);
     Route::post('/dealership/{model}/buy', [FleetController::class, 'buy']);
+    Route::post('/vehicles/{vehicle}/refuel', [FleetController::class, 'refuel']);
+
+    // Trailers: yard, dealership & purchase.
+    Route::get('/trailers', [TrailerController::class, 'index']);
+    Route::get('/trailers/dealership', [TrailerController::class, 'dealership']);
+    Route::post('/trailers/dealership/{model}/buy', [TrailerController::class, 'buy']);
 
     Route::get('/drivers', [DriverController::class, 'index']);
     Route::post('/drivers/hire', [DriverController::class, 'hire']);

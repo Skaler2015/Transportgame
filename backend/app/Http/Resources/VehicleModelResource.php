@@ -17,6 +17,8 @@ class VehicleModelResource extends JsonResource
             'name' => $this->name,
             'brand' => $this->brand,
             'class' => $this->class,
+            'mode' => $this->mode ?? 'road',
+            'needs_trailer' => (bool) $this->needs_trailer,
             'price' => (int) $this->price,
             'capacity_weight' => (float) $this->capacity_weight,
             'capacity_volume' => (float) $this->capacity_volume,

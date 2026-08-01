@@ -6,6 +6,9 @@ use App\Models\City;
 use App\Models\Company;
 use App\Models\Contract;
 use App\Models\Driver;
+use App\Models\LedgerEntry;
+use App\Models\Trailer;
+use App\Models\TrailerModel;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehicleModel;
@@ -63,6 +66,9 @@ class CompanyService
             ]);
         }
 
+        // A starter trailer so the company can graduate to bigger tractors.
+        $this->grantStarterTrailer($company, $hq);
+
         // Starter driver(s).
         for ($i = 0; $i < ($starter['drivers'] ?? 1); $i++) {
             $this->generateDriver($company, skillFloor: 35);
@@ -108,6 +114,10 @@ class CompanyService
             Vehicle::where('company_id', $company->id)->update([
                 'city_id' => $hq->id,
                 'status' => Vehicle::STATUS_IDLE,
+            ]);
+            Trailer::where('company_id', $company->id)->update([
+                'city_id' => $hq->id,
+                'status' => Trailer::STATUS_IDLE,
             ]);
             Driver::where('company_id', $company->id)
                 ->where('status', Driver::STATUS_DRIVING)
@@ -178,6 +188,101 @@ class CompanyService
             "Purchased {$model->name}", -$model->price, $vehicle);
 
         return $vehicle;
+    }
+
+    /** Purchase a trailer from the dealership at its catalog price. */
+    public function buyTrailer(Company $company, TrailerModel $model, ?City $city = null): Trailer
+    {
+        if ($company->level < $model->unlock_level) {
+            throw new RuntimeException("You must reach level {$model->unlock_level} to buy the {$model->name}.");
+        }
+        if ($company->cash < $model->price) {
+            throw new RuntimeException('Not enough cash for this trailer.');
+        }
+
+        $city ??= $company->headquarters ?? City::first();
+
+        $trailer = Trailer::create([
+            'company_id' => $company->id,
+            'trailer_model_id' => $model->id,
+            'city_id' => $city?->id,
+            'status' => Trailer::STATUS_IDLE,
+            'condition' => 100,
+        ]);
+
+        $this->ledger->post($company, LedgerEntry::CAT_PURCHASE,
+            "Purchased {$model->name}", -$model->price, $trailer);
+
+        return $trailer;
+    }
+
+    /**
+     * Refuel a vehicle at the local pump. Fills to (an optional number of
+     * litres, else) the tank's capacity, charging cash at the current city's
+     * fuel price. Electric/hydrogen models with no tank are a no-op.
+     */
+    public function refuelVehicle(Company $company, Vehicle $vehicle, ?float $liters = null): Vehicle
+    {
+        if ($vehicle->company_id !== $company->id) {
+            throw new RuntimeException('That vehicle is not yours.');
+        }
+        if ($vehicle->status === Vehicle::STATUS_EN_ROUTE) {
+            throw new RuntimeException('You can’t refuel a vehicle that is on the road.');
+        }
+
+        $vehicle->loadMissing('model', 'city');
+        $capacity = (float) ($vehicle->model->fuel_capacity ?? 0);
+        if ($capacity <= 0) {
+            throw new RuntimeException('This vehicle doesn’t use fuel.');
+        }
+
+        $room = max(0, $capacity - $vehicle->fuel);
+        $fill = $liters !== null ? min($liters, $room) : $room;
+        if ($fill <= 0.001) {
+            throw new RuntimeException('The tank is already full.');
+        }
+
+        $pricePerLitre = $vehicle->city->fuel_price
+            ?? $company->headquarters?->fuel_price
+            ?? 1.0;
+        $cost = (int) round($fill * $pricePerLitre * 100);
+
+        if ($company->cash < $cost) {
+            throw new RuntimeException('Not enough cash to refuel.');
+        }
+
+        $vehicle->fuel = min($capacity, $vehicle->fuel + $fill);
+        $vehicle->save();
+
+        $this->ledger->post($company, LedgerEntry::CAT_FUEL,
+            "Refuel {$vehicle->model->name} (".round($fill).' L)', -$cost, $vehicle);
+
+        return $vehicle->fresh(['model', 'city']);
+    }
+
+    /** Give a company a free starter box trailer if it has none. */
+    public function grantStarterTrailer(Company $company, ?City $city = null): ?Trailer
+    {
+        if (Trailer::where('company_id', $company->id)->exists()) {
+            return null;
+        }
+
+        $key = config('transoria.equipment.starter_trailer', 'box-std');
+        $model = TrailerModel::where('key', $key)->first() ?? TrailerModel::orderBy('price')->first();
+        if (! $model) {
+            return null;
+        }
+
+        $city ??= $company->headquarters ?? City::where('country', $company->country)->first();
+
+        return Trailer::create([
+            'company_id' => $company->id,
+            'trailer_model_id' => $model->id,
+            'city_id' => $city?->id,
+            'nickname' => 'Starter Box',
+            'status' => Trailer::STATUS_IDLE,
+            'condition' => 100,
+        ]);
     }
 
     /**

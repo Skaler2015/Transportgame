@@ -8,6 +8,7 @@ use App\Http\Resources\ShipmentResource;
 use App\Models\Contract;
 use App\Models\Driver;
 use App\Models\Shipment;
+use App\Models\Trailer;
 use App\Models\Vehicle;
 use App\Services\ShipmentService;
 use Illuminate\Http\Request;
@@ -30,7 +31,7 @@ class ShipmentController extends Controller
         $this->shipments->resolveDueFor($company);
 
         $shipments = Shipment::where('company_id', $company->id)
-            ->with(['contract.commodity', 'contract.origin', 'contract.destination', 'vehicle.model', 'driver'])
+            ->with(['contract.commodity', 'contract.origin', 'contract.destination', 'vehicle.model', 'trailer.model', 'driver'])
             ->orderByRaw("CASE status WHEN 'en_route' THEN 0 ELSE 1 END")
             ->orderByDesc('id')
             ->limit(40)
@@ -48,20 +49,26 @@ class ShipmentController extends Controller
             'contract_id' => ['required', 'integer'],
             'vehicle_id' => ['required', 'integer'],
             'driver_id' => ['required', 'integer'],
+            'trailer_id' => ['nullable', 'integer'],
         ]);
 
         $contract = Contract::where('id', $data['contract_id'])->where('company_id', $company->id)->firstOrFail();
         $vehicle = Vehicle::where('id', $data['vehicle_id'])->where('company_id', $company->id)->firstOrFail();
         $driver = Driver::where('id', $data['driver_id'])->where('company_id', $company->id)->firstOrFail();
 
+        $trailer = null;
+        if (! empty($data['trailer_id'])) {
+            $trailer = Trailer::where('id', $data['trailer_id'])->where('company_id', $company->id)->firstOrFail();
+        }
+
         try {
-            $shipment = $this->shipments->dispatch($company, $contract, $vehicle, $driver);
+            $shipment = $this->shipments->dispatch($company, $contract, $vehicle, $driver, $trailer);
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
         return (new ShipmentResource(
-            $shipment->load(['contract.commodity', 'contract.origin', 'contract.destination', 'vehicle.model', 'driver'])
+            $shipment->load(['contract.commodity', 'contract.origin', 'contract.destination', 'vehicle.model', 'trailer.model', 'driver'])
         ))->response()->setStatusCode(201);
     }
 }

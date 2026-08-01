@@ -7,6 +7,7 @@ use App\Models\Contract;
 use App\Models\Driver;
 use App\Models\LedgerEntry;
 use App\Models\Shipment;
+use App\Models\Trailer;
 use App\Models\Vehicle;
 use App\Models\WorldEvent;
 use Illuminate\Support\Facades\DB;
@@ -35,9 +36,9 @@ class ShipmentService
      * Dispatch a vehicle + driver against an accepted contract. Throws
      * RuntimeException with a human message on any validation failure.
      */
-    public function dispatch(Company $company, Contract $contract, Vehicle $vehicle, Driver $driver): Shipment
+    public function dispatch(Company $company, Contract $contract, Vehicle $vehicle, Driver $driver, ?Trailer $trailer = null): Shipment
     {
-        return DB::transaction(function () use ($company, $contract, $vehicle, $driver) {
+        return DB::transaction(function () use ($company, $contract, $vehicle, $driver, $trailer) {
             $contract->loadMissing('commodity', 'origin', 'destination');
             $vehicle->loadMissing('model');
 
@@ -54,9 +55,16 @@ class ShipmentService
             $commodity = $contract->commodity;
             $model = $vehicle->model;
 
-            if (! $commodity->canBeCarriedBy($model)) {
-                throw new RuntimeException("A {$model->name} can't handle {$commodity->name}.");
+            // Mode-specific infrastructure: ships sail port-to-port, freighters
+            // fly airport-to-airport. Road and rail run anywhere.
+            $mode = $model->mode ?? 'road';
+            if ($mode === 'sea' && ! ($contract->origin->has_port && $contract->destination->has_port)) {
+                throw new RuntimeException('A cargo ship needs a port at both ends of this lane.');
             }
+            if ($mode === 'air' && ! ($contract->origin->has_airport && $contract->destination->has_airport)) {
+                throw new RuntimeException('An air freighter needs an airport at both ends of this lane.');
+            }
+
             if ($commodity->is_hazardous && ! $driver->hazmat_licence) {
                 throw new RuntimeException("{$driver->name} lacks a hazmat licence for this cargo.");
             }
@@ -64,12 +72,36 @@ class ShipmentService
             $totalWeight = $commodity->weight_per_unit * $contract->units;
             $totalVolume = $commodity->volume_per_unit * $contract->units;
 
-            // Capacity includes any trailer upgrades on this specific vehicle.
-            if ($totalWeight > $vehicle->effectiveCapacityWeight() + 0.001) {
-                throw new RuntimeException('Cargo exceeds the vehicle weight capacity.');
+            // Trailer vs self-contained. Road tractors must pull a trailer whose
+            // type suits the cargo, and the trailer governs how much they haul.
+            // Rigid vans and rail/sea/air craft carry cargo directly.
+            if ($model->needs_trailer) {
+                if (! $trailer) {
+                    throw new RuntimeException("A {$model->name} needs a trailer — attach one to haul.");
+                }
+                $trailer->loadMissing('model');
+                if ($trailer->company_id !== $company->id || ! $trailer->isAvailable()) {
+                    throw new RuntimeException('That trailer is not available.');
+                }
+                if (! $trailer->model->canCarry($commodity)) {
+                    throw new RuntimeException("A {$trailer->model->name} can't carry {$commodity->name} — use the right trailer type.");
+                }
+                $capWeight = $trailer->model->capacity_weight;
+                $capVolume = $trailer->model->capacity_volume;
+            } else {
+                $trailer = null; // ignore any trailer passed for a self-contained craft
+                if (! $commodity->canBeCarriedBy($model)) {
+                    throw new RuntimeException("A {$model->name} can't handle {$commodity->name}.");
+                }
+                $capWeight = $vehicle->effectiveCapacityWeight();
+                $capVolume = $vehicle->effectiveCapacityVolume();
             }
-            if ($totalVolume > $vehicle->effectiveCapacityVolume() + 0.001) {
-                throw new RuntimeException('Cargo exceeds the vehicle volume capacity.');
+
+            if ($totalWeight > $capWeight + 0.001) {
+                throw new RuntimeException('Cargo exceeds the haulage weight capacity.');
+            }
+            if ($totalVolume > $capVolume + 0.001) {
+                throw new RuntimeException('Cargo exceeds the haulage volume capacity.');
             }
 
             $bonuses = $this->research->bonuses($company);
@@ -90,13 +122,17 @@ class ShipmentService
             $speed = max(30, $model->top_speed * $speedFactor * $weatherFactor * $trafficFactor);
             $travelHours = $distance / $speed;
 
-            // Fuel budget & upfront fuel cost (electric/hydrogen sip a little).
+            // Fuel drawn from the vehicle's own tank (electric/hydrogen sip a
+            // little; econ 0 models need none). You pay for fuel when you refuel,
+            // not per trip — so the tank must already hold enough to make it.
             $economy = $model->fuel_economy * (1 + ($bonuses['fuel_economy'] ?? 0)) * $engineFuel;
             $fuelBudget = max(0, $distance * $economy);
-            $fuelCost = (int) round($fuelBudget * $contract->origin->fuel_price * 100);
 
-            if ($company->cash < $fuelCost) {
-                throw new RuntimeException('Not enough cash to fuel this trip.');
+            if ($fuelBudget > 0 && $vehicle->fuel + 0.001 < $fuelBudget) {
+                throw new RuntimeException(
+                    'Not enough fuel in the tank for this trip — refuel '.
+                    ($vehicle->nickname ?: $model->name).' first.'
+                );
             }
 
             $secondsPerGameHour = config('transoria.tick.seconds_per_game_hour', 60);
@@ -107,6 +143,7 @@ class ShipmentService
                 'company_id' => $company->id,
                 'contract_id' => $contract->id,
                 'vehicle_id' => $vehicle->id,
+                'trailer_id' => $trailer?->id,
                 'driver_id' => $driver->id,
                 'status' => Shipment::STATUS_EN_ROUTE,
                 'distance_km' => round($distance, 2),
@@ -123,17 +160,14 @@ class ShipmentService
                 'eta_at' => $etaAt,
             ]);
 
-            if ($fuelCost > 0) {
-                $this->ledger->post(
-                    $company,
-                    LedgerEntry::CAT_FUEL,
-                    "Fuel: {$contract->origin->name} → {$contract->destination->name}",
-                    -$fuelCost,
-                    $shipment,
-                );
-            }
+            // Burn the fuel from the tank now (it was paid for at the pump).
+            $vehicle->fuel = max(0, $vehicle->fuel - $fuelBudget);
+            $vehicle->status = Vehicle::STATUS_EN_ROUTE;
+            $vehicle->save();
 
-            $vehicle->update(['status' => Vehicle::STATUS_EN_ROUTE, 'fuel' => $model->fuel_capacity]);
+            if ($trailer) {
+                $trailer->update(['status' => Trailer::STATUS_EN_ROUTE]);
+            }
             $driver->update(['status' => Driver::STATUS_DRIVING]);
             $contract->update(['status' => Contract::STATUS_IN_PROGRESS]);
 
@@ -252,10 +286,22 @@ class ShipmentService
             // Tyre upgrades cut wear by 15% per level.
             $tireResist = max(0.4, 1 - 0.15 * $vehicle->tires_level);
             $vehicle->tire_wear = min(100, $vehicle->tire_wear + $km / 1000 * $cfg['tire_loss_per_1000km'] * $tireResist);
-            $vehicle->fuel = max(0, $vehicle->fuel - $shipment->fuel_budget);
+            // Fuel was already burned from the tank at dispatch — don't drain twice.
             $vehicle->status = $vehicle->condition < 15 ? Vehicle::STATUS_MAINTENANCE : Vehicle::STATUS_IDLE;
             $vehicle->city_id = $contract->destination_city_id;
             $vehicle->save();
+
+            // Release the trailer back to the yard at the destination, with wear.
+            if ($shipment->trailer_id) {
+                $trailer = $shipment->trailer()->with('model')->first();
+                if ($trailer) {
+                    $wear = $km / 1000 * config('transoria.equipment.trailer_wear_per_1000km', 5.0);
+                    $trailer->condition = max(0, $trailer->condition - $wear);
+                    $trailer->status = Trailer::STATUS_IDLE;
+                    $trailer->city_id = $contract->destination_city_id;
+                    $trailer->save();
+                }
+            }
 
             // --- Driver ---------------------------------------------------------
             $driver->fatigue = min(100, $driver->fatigue + $cfg['fatigue_gain_per_trip']);

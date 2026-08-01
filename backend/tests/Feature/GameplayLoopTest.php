@@ -5,12 +5,15 @@ namespace Tests\Feature;
 use App\Models\Contract;
 use App\Models\Driver;
 use App\Models\Shipment;
+use App\Models\Trailer;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Models\VehicleModel;
 use App\Services\CompanyService;
 use App\Services\ShipmentService;
 use Database\Seeders\CitySeeder;
 use Database\Seeders\CommoditySeeder;
+use Database\Seeders\TrailerModelSeeder;
 use Database\Seeders\VehicleModelSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -26,7 +29,7 @@ class GameplayLoopTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed([CommoditySeeder::class, CitySeeder::class, VehicleModelSeeder::class]);
+        $this->seed([CommoditySeeder::class, CitySeeder::class, VehicleModelSeeder::class, TrailerModelSeeder::class]);
     }
 
     /** Whether a contract's cargo physically fits (and is handleable by) a vehicle. */
@@ -161,5 +164,104 @@ class GameplayLoopTest extends TestCase
 
         $this->expectException(\RuntimeException::class);
         app(ShipmentService::class)->dispatch($company, $tooBig, $vehicle, $driver);
+    }
+
+    /** Find an open, general (non-special) local contract the starter box can haul. */
+    private function generalLocalContract(int $hqId, float $maxTonnes = 12.0, float $maxVolume = 60.0): ?Contract
+    {
+        return Contract::onMarket()->where('origin_city_id', $hqId)->with('commodity')->get()
+            ->first(fn (Contract $c) => ! $c->commodity->requires_reefer
+                && ! $c->commodity->requires_tanker
+                && ! $c->commodity->is_hazardous
+                && $c->commodity->weight_per_unit * $c->units <= $maxTonnes
+                && $c->commodity->volume_per_unit * $c->units <= $maxVolume);
+    }
+
+    public function test_road_tractor_needs_a_matching_trailer_to_dispatch(): void
+    {
+        $user = User::factory()->create();
+        $svc = app(CompanyService::class);
+        $ship = app(ShipmentService::class);
+
+        $company = $svc->found($user, 'Trailer Co');
+        $driver = $company->drivers()->first();
+        $hq = $company->headquarters_city_id;
+
+        // A medium tractor (needs a trailer), parked and fuelled at HQ.
+        $tractorModel = VehicleModel::where('key', 'kestrel-t20')->first();
+        $tractor = Vehicle::create([
+            'company_id' => $company->id,
+            'vehicle_model_id' => $tractorModel->id,
+            'city_id' => $hq,
+            'status' => Vehicle::STATUS_IDLE,
+            'condition' => 100,
+            'fuel' => $tractorModel->fuel_capacity,
+        ]);
+
+        // The starter box trailer (granted at founding).
+        $trailer = Trailer::where('company_id', $company->id)->first();
+        $this->assertNotNull($trailer, 'Founding should grant a starter trailer.');
+
+        $contract = null;
+        for ($i = 0; $i < 10 && ! $contract; $i++) {
+            $this->artisan('world:tick');
+            $contract = $this->generalLocalContract($hq);
+        }
+        $this->assertNotNull($contract, 'No general local contract to test trailer dispatch.');
+        $svc->acceptContract($company, $contract);
+
+        // Without a trailer → rejected.
+        try {
+            $ship->dispatch($company, $contract->fresh(), $tractor->fresh(), $driver->fresh(), null);
+            $this->fail('A tractor without a trailer should not dispatch.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('trailer', strtolower($e->getMessage()));
+        }
+
+        // With the box trailer → dispatches, and the trailer rolls out.
+        $shipment = $ship->dispatch($company, $contract->fresh(), $tractor->fresh(), $driver->fresh(), $trailer->fresh());
+        $this->assertSame(Vehicle::STATUS_EN_ROUTE, $tractor->fresh()->status);
+        $this->assertSame(Trailer::STATUS_EN_ROUTE, $trailer->fresh()->status);
+        $this->assertSame($trailer->id, $shipment->trailer_id);
+    }
+
+    public function test_dispatch_needs_fuel_and_refuelling_restores_it(): void
+    {
+        $user = User::factory()->create();
+        $svc = app(CompanyService::class);
+        $ship = app(ShipmentService::class);
+
+        $company = $svc->found($user, 'Fuel Co');
+        $vehicle = $company->vehicles()->with('model')->first(); // starter van (self-contained)
+        $driver = $company->drivers()->first();
+        $hq = $company->headquarters_city_id;
+
+        $vehicle->update(['fuel' => 0]); // run the tank dry
+
+        $contract = null;
+        for ($i = 0; $i < 10 && ! $contract; $i++) {
+            $this->artisan('world:tick');
+            $contract = Contract::onMarket()->where('origin_city_id', $hq)->with('commodity')->get()
+                ->first(fn (Contract $c) => $this->fits($c, $vehicle));
+        }
+        $this->assertNotNull($contract);
+        $svc->acceptContract($company, $contract);
+
+        // Empty tank → blocked.
+        try {
+            $ship->dispatch($company, $contract->fresh(), $vehicle->fresh(), $driver->fresh());
+            $this->fail('Dispatch on an empty tank should be blocked.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('fuel', strtolower($e->getMessage()));
+        }
+
+        // Refuel (charges cash), then dispatch succeeds.
+        $cashBefore = $company->fresh()->cash;
+        $svc->refuelVehicle($company->fresh(), $vehicle->fresh());
+        $this->assertGreaterThan(0, $vehicle->fresh()->fuel);
+        $this->assertLessThan($cashBefore, $company->fresh()->cash);
+
+        $ship->dispatch($company->fresh(), $contract->fresh(), $vehicle->fresh(), $driver->fresh());
+        $this->assertSame(Vehicle::STATUS_EN_ROUTE, $vehicle->fresh()->status);
     }
 }

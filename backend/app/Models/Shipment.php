@@ -41,6 +41,11 @@ class Shipment extends Model
         return $this->belongsTo(Vehicle::class);
     }
 
+    public function trailer(): BelongsTo
+    {
+        return $this->belongsTo(Trailer::class);
+    }
+
     public function driver(): BelongsTo
     {
         return $this->belongsTo(Driver::class);

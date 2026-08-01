@@ -14,7 +14,7 @@ return [
     // deploy the app notices the stored marker no longer matches and runs
     // `migrate --force` + `transoria:worldsync` once, so shared hosts that
     // never run the CLI still stay fully migrated. See EnsureSchemaUpToDate.
-    'schema_version' => '2026.08.01-country',
+    'schema_version' => '2026.08.02-trailers-modes-fuel',
 
     // In-game currency label.
     'currency' => ['code' => 'CR', 'symbol' => '₡', 'name' => 'Credits'],
@@ -184,6 +184,24 @@ return [
             ['period' => 'weekly', 'metric' => 'deliveries', 'title' => 'Freight Baron', 'target' => 20, 'cash' => 60_000_00, 'xp' => 400],
             ['period' => 'weekly', 'metric' => 'revenue', 'title' => 'Big Money Week', 'target' => 300_000, 'cash' => 70_000_00, 'xp' => 450],
         ],
+    ],
+
+    // Trailers & fuel — the LogiTycoon-style haulage loop: a road tractor pulls
+    // a trailer whose type must match the cargo, and every trip burns fuel from
+    // the vehicle's own tank (refuel to top it up).
+    'equipment' => [
+        // Trailer condition wear per 1000 km hauled.
+        'trailer_wear_per_1000km' => 5.0,
+        // A brand-new company (and legacy companies) get this starter trailer so
+        // their bigger tractors can haul from day one.
+        'starter_trailer' => 'box-std',
+    ],
+
+    'fuel' => [
+        // When a tank drops below this fraction, the UI nudges a refuel.
+        'low_warning_pct' => 0.25,
+        // Small handling margin added when refuelling to be safe on a trip.
+        'refuel_headroom' => 1.0,
     ],
 
     // Guilds.
