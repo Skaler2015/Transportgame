@@ -373,41 +373,51 @@ onUnmounted(() => clearInterval(poll))
     <!-- Compact, sortable contract table. Click a row's GO to dispatch. -->
     <div v-else-if="contracts.length" class="glass !p-0 overflow-hidden">
       <div class="overflow-x-auto">
-      <table class="w-full text-sm min-w-[720px] border-collapse">
-        <thead class="text-[11px] uppercase tracking-wider text-slate-400 select-none bg-ink-900/80 backdrop-blur sticky top-0 z-10">
+      <table class="w-full text-sm min-w-[880px] border-collapse">
+        <thead class="text-[10px] uppercase tracking-wider text-slate-400 select-none bg-ink-900/80 backdrop-blur sticky top-0 z-10">
           <tr class="border-b border-white/10">
-            <th class="text-left px-4 py-3 font-semibold">Cargo · Route</th>
-            <th class="text-right px-2 cursor-pointer hover:text-brand-soft transition" @click="setContractSort('distance_km')">Load{{ sortMark('distance_km') }}</th>
+            <th class="text-left px-3 py-3 font-semibold">Cargo</th>
+            <th class="text-left px-2 font-semibold">From</th>
+            <th class="text-left px-2 font-semibold">To</th>
+            <th class="text-center px-2">Status</th>
+            <th class="text-right px-2 cursor-pointer hover:text-brand-soft transition" @click="setContractSort('distance_km')">Dist{{ sortMark('distance_km') }}</th>
+            <th class="text-right px-2">Load</th>
+            <th class="text-right px-2">ETA</th>
             <th class="text-right px-2 cursor-pointer hover:text-brand-soft transition" @click="setContractSort('payout')">Value{{ sortMark('payout') }}</th>
-            <th class="text-right px-2">Est. profit</th>
+            <th class="text-right px-2">Profit</th>
             <th class="text-center px-2 cursor-pointer hover:text-brand-soft transition" @click="setContractSort('difficulty')">Diff{{ sortMark('difficulty') }}</th>
-            <th class="text-right px-4">Dispatch</th>
+            <th class="text-right px-3"></th>
           </tr>
         </thead>
         <tbody>
           <template v-for="c in contracts" :key="c.id">
             <tr class="border-b border-white/5 transition hover:bg-brand/[0.06] odd:bg-white/[0.015]"
               :class="c.at_fleet_city ? 'bg-brand/[0.07]' : ''">
-              <td class="px-4 py-2.5 border-l-2" :class="c.at_fleet_city ? (c.fleet_arriving ? 'border-gold/70' : 'border-brand') : 'border-transparent'">
-                <div class="flex items-center gap-2.5 min-w-0">
+              <!-- Cargo -->
+              <td class="px-3 py-2.5 border-l-2" :class="c.at_fleet_city ? (c.fleet_arriving ? 'border-gold/70' : 'border-brand') : 'border-transparent'">
+                <div class="flex items-center gap-2 min-w-0">
                   <CommodityBadge :commodity="c.commodity" size="sm" />
-                  <div class="min-w-0">
-                    <p class="font-semibold truncate">
-                      {{ c.origin?.name }} <span class="text-brand mx-0.5">→</span> {{ c.destination?.name }}
-                    </p>
-                    <p class="text-[10px] truncate mt-0.5">
-                      <span v-if="c.at_fleet_city" class="font-semibold" :class="c.fleet_arriving ? 'text-gold' : 'text-brand-soft'">🚚 {{ c.fleet_arriving ? 'Truck arriving' : 'Truck here' }} · </span>
-                      <span v-if="c.is_rush" class="text-loss font-semibold">RUSH · </span>
-                      <span class="text-slate-500">{{ c.commodity?.name }}</span>
-                    </p>
-                  </div>
+                  <span class="truncate text-[12px] font-medium">{{ c.commodity?.name }}</span>
                 </div>
               </td>
-              <td class="px-2 text-right whitespace-nowrap text-[11px] text-slate-300">
-                {{ num(c.distance_km) }} km<br><span class="text-slate-500">{{ num(c.total_weight ?? 0, 1) }}t · ⏱{{ etaText(c.distance_km) }}</span>
+              <!-- From / To -->
+              <td class="px-2 font-medium truncate max-w-[120px]">{{ c.origin?.name }}</td>
+              <td class="px-2 font-medium truncate max-w-[120px]"><span class="text-brand">→</span> {{ c.destination?.name }}</td>
+              <!-- Status -->
+              <td class="px-2 text-center whitespace-nowrap">
+                <span v-if="c.at_fleet_city" class="chip text-[9px]" :class="c.fleet_arriving ? 'bg-gold/20 text-gold' : 'bg-gain/20 text-gain'">
+                  🚚 {{ c.fleet_arriving ? 'arriving' : 'here' }}
+                </span>
+                <span v-if="c.is_rush" class="chip text-[9px] bg-loss/20 text-loss ml-0.5">RUSH</span>
+                <span v-if="!c.at_fleet_city && !c.is_rush" class="text-slate-600">·</span>
               </td>
-              <td class="px-2 text-right font-mono text-gold font-semibold">{{ credits(c.payout) }}</td>
-              <td class="px-2 text-right font-mono font-semibold" :class="costBreakdown(c).profit >= 0 ? 'text-gain' : 'text-loss'">
+              <!-- Distance / Load / ETA -->
+              <td class="px-2 text-right font-mono text-[12px] text-slate-300 whitespace-nowrap">{{ num(c.distance_km) }} km</td>
+              <td class="px-2 text-right font-mono text-[12px] text-slate-300 whitespace-nowrap">{{ num(c.total_weight ?? 0, 1) }}t</td>
+              <td class="px-2 text-right font-mono text-[12px] text-brand-soft whitespace-nowrap">{{ etaText(c.distance_km) }}</td>
+              <!-- Value / Profit / Diff -->
+              <td class="px-2 text-right font-mono text-gold font-semibold whitespace-nowrap">{{ credits(c.payout) }}</td>
+              <td class="px-2 text-right font-mono font-semibold whitespace-nowrap" :class="costBreakdown(c).profit >= 0 ? 'text-gain' : 'text-loss'">
                 {{ credits(costBreakdown(c).profit) }}
               </td>
               <td class="px-2 text-center"><DifficultyStars :value="c.difficulty" /></td>
@@ -419,7 +429,7 @@ onUnmounted(() => clearInterval(poll))
             </tr>
             <!-- Dispatch drawer -->
             <tr v-if="expandedContract === c.id" class="bg-ink-900/50 border-b border-white/5">
-              <td colspan="6" class="px-3 py-3">
+              <td colspan="11" class="px-3 py-3">
                 <div class="grid md:grid-cols-2 gap-3">
                   <!-- Cost breakdown -->
                   <div class="rounded-lg bg-ink-900/60 px-3 py-2 text-[12px] space-y-1">
