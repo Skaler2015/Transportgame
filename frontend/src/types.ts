@@ -94,6 +94,7 @@ export interface VehicleModel {
 
 export interface Vehicle {
   id: number
+  fleet_no?: number | null
   nickname: string | null
   livery_color: string
   status: string

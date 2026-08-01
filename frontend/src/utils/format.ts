@@ -57,3 +57,8 @@ export const CATEGORY_COLOR: Record<string, string> = {
   food: '#84cc16', tech: '#38bdf8', industrial: '#a78bfa', raw: '#f59e0b',
   hazmat: '#fb7185', luxury: '#f0abfc', livestock: '#fbbf24',
 }
+
+/** A vehicle's fleet number, zero-padded, e.g. #0001. */
+export function fleetTag(no?: number | null): string {
+  return no ? `#${String(no).padStart(4, '0')}` : ''
+}

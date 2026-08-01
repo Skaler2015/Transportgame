@@ -5,7 +5,7 @@ import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
 import { useClock } from '../composables/useClock'
 import type { Contract, Vehicle, Trailer, Driver, Shipment } from '../types'
-import { credits, num } from '../utils/format'
+import { credits, num, fleetTag } from '../utils/format'
 import CommodityBadge from '../components/CommodityBadge.vue'
 import DifficultyStars from '../components/DifficultyStars.vue'
 
@@ -471,7 +471,7 @@ onUnmounted(() => clearInterval(poll))
                   <div class="space-y-1.5">
                     <select v-model="selection[c.id].vehicle_id" class="input !py-1.5 text-xs">
                       <option :value="null" disabled>Choose vehicle…</option>
-                      <option v-for="v in compatibleVehicles(c)" :key="v.id" :value="v.id">{{ v.nickname || v.model?.name }} · fuel {{ Math.round(v.fuel_pct ?? 100) }}%</option>
+                      <option v-for="v in compatibleVehicles(c)" :key="v.id" :value="v.id">{{ fleetTag(v.fleet_no) }} {{ v.nickname || v.model?.name }} · fuel {{ Math.round(v.fuel_pct ?? 100) }}%</option>
                     </select>
                     <select v-if="needsTrailer(c)" v-model="selection[c.id].trailer_id" class="input !py-1.5 text-xs">
                       <option :value="null" disabled>Attach trailer…</option>
@@ -526,7 +526,7 @@ onUnmounted(() => clearInterval(poll))
           <div v-if="expandedContract === c.id" class="mt-2 pt-2 border-t border-white/10 space-y-1.5">
             <select v-model="selection[c.id].vehicle_id" class="input !py-1.5 text-xs">
               <option :value="null" disabled>Choose vehicle…</option>
-              <option v-for="v in compatibleVehicles(c)" :key="v.id" :value="v.id">{{ v.nickname || v.model?.name }} · fuel {{ Math.round(v.fuel_pct ?? 100) }}%</option>
+              <option v-for="v in compatibleVehicles(c)" :key="v.id" :value="v.id">{{ fleetTag(v.fleet_no) }} {{ v.nickname || v.model?.name }} · fuel {{ Math.round(v.fuel_pct ?? 100) }}%</option>
             </select>
             <select v-if="needsTrailer(c)" v-model="selection[c.id].trailer_id" class="input !py-1.5 text-xs">
               <option :value="null" disabled>Attach trailer…</option>
@@ -596,7 +596,7 @@ onUnmounted(() => clearInterval(poll))
        </h3>
        <div v-if="freeVehicles.length" class="divide-y divide-white/5">
          <div v-for="v in freeVehicles" :key="v.id" class="py-2">
-           <p class="text-xs font-medium">{{ v.nickname || v.model?.name }}</p>
+           <p class="text-xs font-medium"><span class="font-mono text-brand-soft mr-1">{{ fleetTag(v.fleet_no) }}</span>{{ v.nickname || v.model?.name }}</p>
            <p class="text-[11px] text-slate-400 mt-0.5">📍 {{ v.city?.name || '—' }}</p>
          </div>
        </div>

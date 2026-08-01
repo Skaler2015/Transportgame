@@ -11,6 +11,7 @@ class VehicleResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'fleet_no' => $this->fleet_no !== null ? (int) $this->fleet_no : null,
             'nickname' => $this->nickname,
             'livery_color' => $this->livery_color,
             'status' => $this->status,

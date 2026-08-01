@@ -178,6 +178,7 @@ class CompanyService
                 'vehicle_model_id' => $model->id,
                 'city_id' => $hq->id,
                 'nickname' => 'Old Faithful',
+                'fleet_no' => $this->nextFleetNo($company->id),
                 'status' => Vehicle::STATUS_IDLE,
                 'condition' => 100,
                 'fuel' => $model->fuel_capacity,
@@ -308,6 +309,7 @@ class CompanyService
             'company_id' => $company->id,
             'vehicle_model_id' => $model->id,
             'city_id' => $city->id,
+            'fleet_no' => $this->nextFleetNo($company->id),
             'status' => Vehicle::STATUS_IDLE,
             'condition' => 100,
             'fuel' => $model->fuel_capacity,
@@ -317,6 +319,12 @@ class CompanyService
             "Purchased {$model->name}", -$model->price, $vehicle);
 
         return $vehicle;
+    }
+
+    /** The next per-company fleet number (1, 2, 3 …). */
+    private function nextFleetNo(int $companyId): int
+    {
+        return (int) Vehicle::where('company_id', $companyId)->max('fleet_no') + 1;
     }
 
     /** Purchase a trailer from the dealership at its catalog price. */

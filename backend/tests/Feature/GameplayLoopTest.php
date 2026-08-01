@@ -442,6 +442,24 @@ class GameplayLoopTest extends TestCase
         }
     }
 
+    public function test_vehicles_get_sequential_fleet_numbers(): void
+    {
+        $user = User::factory()->create();
+        $companyService = app(CompanyService::class);
+        $company = $companyService->found($user, 'Numbered Co');
+
+        // The starter truck is #1.
+        $this->assertSame(1, (int) $company->vehicles()->first()->fleet_no);
+
+        // Each purchase takes the next number.
+        $model = VehicleModel::orderBy('price')->first();
+        $second = $companyService->buyVehicle($company->fresh(), $model);
+        $third = $companyService->buyVehicle($company->fresh(), $model);
+
+        $this->assertSame(2, (int) $second->fleet_no);
+        $this->assertSame(3, (int) $third->fleet_no);
+    }
+
     public function test_cannot_dispatch_cargo_that_exceeds_vehicle_capacity(): void
     {
         $user = User::factory()->create();

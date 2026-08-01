@@ -4,7 +4,7 @@ import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
 import type { Vehicle, VehicleModel, Trailer, TrailerModel } from '../types'
-import { credits, num } from '../utils/format'
+import { credits, num, fleetTag } from '../utils/format'
 
 const game = useGameStore()
 const toast = useToastStore()
@@ -306,7 +306,9 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
                 <div class="flex items-center gap-2 min-w-0">
                   <span>{{ MODE_ICON[v.model?.mode ?? 'road'] }}</span>
                   <div class="min-w-0">
-                    <p class="font-medium truncate">{{ v.nickname || v.model?.name }}</p>
+                    <p class="font-medium truncate">
+                      <span class="font-mono text-brand-soft text-[11px] mr-1">{{ fleetTag(v.fleet_no) }}</span>{{ v.nickname || v.model?.name }}
+                    </p>
                     <p class="text-[10px] text-slate-500 truncate">{{ v.model?.name }} · {{ num((v as any).effective_capacity_weight ?? v.model?.capacity_weight ?? 0, 1) }}t · {{ v.model?.needs_trailer ? 'tractor' : 'rigid' }}</p>
                   </div>
                 </div>

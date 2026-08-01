@@ -5,7 +5,7 @@ import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
 import { useClock } from '../composables/useClock'
 import type { Contract, Vehicle, Trailer, Driver, Shipment } from '../types'
-import { credits, num } from '../utils/format'
+import { credits, num, fleetTag } from '../utils/format'
 import CommodityBadge from '../components/CommodityBadge.vue'
 
 const game = useGameStore()
@@ -277,7 +277,7 @@ onUnmounted(() => clearInterval(poll))
               <select v-model="selection[c.id].vehicle_id" class="input !py-1.5 text-xs mt-0.5">
                 <option :value="null" disabled>Choose vehicle…</option>
                 <option v-for="v in compatibleVehicles(c)" :key="v.id" :value="v.id">
-                  {{ MODE_ICON[v.model?.mode ?? 'road'] }} {{ v.nickname || v.model?.name }} · {{ num(v.condition) }}% · fuel {{ Math.round(v.fuel_pct ?? 100) }}%
+                  {{ MODE_ICON[v.model?.mode ?? 'road'] }} {{ fleetTag(v.fleet_no) }} {{ v.nickname || v.model?.name }} · {{ num(v.condition) }}% · fuel {{ Math.round(v.fuel_pct ?? 100) }}%
                 </option>
               </select>
             </div>
