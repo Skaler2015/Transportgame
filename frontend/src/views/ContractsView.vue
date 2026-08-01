@@ -195,7 +195,46 @@ const maxTimeLeft = computed(() => {
 // Contract table: expand-to-dispatch drawer + client-side sort on any column.
 const expandedContract = ref<number | null>(null)
 function toggleContract(id: number) {
-  expandedContract.value = expandedContract.value === id ? null : id
+  const opening = expandedContract.value !== id
+  expandedContract.value = opening ? id : null
+  // Opening a job? Pre-pick the best rig so the player can just hit GO.
+  if (opening) {
+    const c = contracts.value.find((x) => x.id === id)
+    if (c) autoSelect(c)
+  }
+}
+
+// Pick the strongest sensible rig for a contract: the tightest-fitting truck
+// with the most fuel/best condition, the smallest trailer that carries it,
+// and the most skilled available driver — so one tap on GO dispatches it.
+function bestVehicle(c: Contract): Vehicle | undefined {
+  return [...compatibleVehicles(c)].sort((a, b) => {
+    const capA = a.model?.capacity_weight ?? 0, capB = b.model?.capacity_weight ?? 0
+    if (capA !== capB) return capA - capB // conserve big trucks — smallest that fits
+    const fuel = (b.fuel_pct ?? 100) - (a.fuel_pct ?? 100)
+    if (fuel) return fuel
+    return (b.condition ?? 100) - (a.condition ?? 100)
+  })[0]
+}
+function bestTrailer(c: Contract): Trailer | undefined {
+  return [...compatibleTrailers(c)].sort(
+    (a, b) => (a.model?.capacity_weight ?? 0) - (b.model?.capacity_weight ?? 0),
+  )[0]
+}
+function bestDriver(c: Contract): Driver | undefined {
+  return [...compatibleDrivers(c)].sort((a, b) => {
+    const skill = (b.skill ?? 0) - (a.skill ?? 0)
+    if (skill) return skill
+    return (b.morale ?? 0) - (a.morale ?? 0) || (a.fatigue ?? 0) - (b.fatigue ?? 0)
+  })[0]
+}
+function autoSelect(c: Contract) {
+  if (!selection.value[c.id]) selection.value[c.id] = { vehicle_id: null, trailer_id: null, driver_id: null }
+  const sel = selection.value[c.id]
+  if (!sel.vehicle_id) sel.vehicle_id = bestVehicle(c)?.id ?? null
+  if (!sel.driver_id) sel.driver_id = bestDriver(c)?.id ?? null
+  // Trailer only matters when the chosen tractor needs one.
+  if (!sel.trailer_id && needsTrailer(c)) sel.trailer_id = bestTrailer(c)?.id ?? null
 }
 
 type CSortKey = 'cargo' | 'from' | 'to' | 'status' | 'dist' | 'load' | 'eta' | 'value' | 'profit' | 'diff'
