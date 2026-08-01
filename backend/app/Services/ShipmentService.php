@@ -113,13 +113,17 @@ class ShipmentService
             $weather = $contract->destination->weather ?? 'clear';
             $weatherFactor = self::WEATHER_FACTOR[$weather] ?? 1.0;
             $trafficFactor = 1 - ($contract->destination->traffic / 100) * 0.4;
+            // Road quality along the lane (avg of both ends): rough roads slow
+            // you down. ~0.82 (poor) → 1.0 (excellent).
+            $avgRoad = (($contract->origin->road_quality ?? 70) + ($contract->destination->road_quality ?? 70)) / 2;
+            $roadFactor = 0.82 + ($avgRoad / 100) * 0.18;
             // Engine upgrades: +4% speed and -5% fuel burn per level.
             $engineSpeed = 1 + 0.04 * $vehicle->engine_level;
             $engineFuel = 1 - 0.05 * $vehicle->engine_level;
 
             $speedFactor = $driver->speedFactor() * (1 + ($bonuses['speed_factor'] ?? 0)) * $engineSpeed;
 
-            $speed = max(30, $model->top_speed * $speedFactor * $weatherFactor * $trafficFactor);
+            $speed = max(30, $model->top_speed * $speedFactor * $weatherFactor * $trafficFactor * $roadFactor);
             $travelHours = $distance / $speed;
 
             // Fuel drawn from the vehicle's own tank (electric/hydrogen sip a
@@ -272,6 +276,15 @@ class ShipmentService
                 }
                 $this->missions->progress($company, 'revenue', (int) round($net / 100));
                 $this->missions->progress($company, 'distance', (int) round($shipment->distance_km));
+
+                // Highway tolls & road charges along the lane (avg of both ends).
+                $avgToll = (($contract->origin->toll_per_km ?? 0) + ($contract->destination->toll_per_km ?? 0)) / 2;
+                $tollCost = (int) round($shipment->distance_km * $avgToll * 100);
+                if ($tollCost > 0) {
+                    $this->ledger->post($company, LedgerEntry::CAT_UPKEEP,
+                        "Tolls & road charges: {$contract->origin->name} → {$contract->destination->name}",
+                        -$tollCost, $shipment);
+                }
             }
 
             if ($repairCost > 0) {
