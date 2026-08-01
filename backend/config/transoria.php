@@ -60,7 +60,7 @@ return [
 
     // Contract market generation.
     'contracts' => [
-        'target_open_per_hub' => 6,   // keep roughly this many open per producing city
+        'target_open_per_hub' => 12,  // keep roughly this many open per producing city
         'base_margin' => 0.28,        // payout premium over raw cargo value spread
         'rush_margin_bonus' => 0.35,  // extra premium for rush jobs
         'penalty_pct' => 0.4,         // failure penalty as fraction of payout

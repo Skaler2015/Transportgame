@@ -246,8 +246,11 @@ class EconomyService
         // tonnage band, then derive unit count from the commodity's unit weight
         // so heavy goods yield few units and light goods yield many — and so
         // there are always small loads a starter truck can actually haul.
+        // Weighted toward smaller loads so an early-game starter truck always
+        // has plenty of contracts it can physically carry.
         $bands = [
-            [0.5, 1.1], [0.5, 1.1], [1.5, 3.4], [1.5, 3.4],
+            [0.5, 1.1], [0.5, 1.1], [0.5, 1.1],
+            [1.5, 3.4], [1.5, 3.4], [1.5, 3.4],
             [4.0, 9.0], [10.0, 20.0], [20.0, 26.0],
         ];
         [$lo, $hi] = $bands[array_rand($bands)];
