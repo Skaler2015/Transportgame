@@ -98,10 +98,12 @@ async function loadEstimate() {
 // --- Side panel: live fleet at a glance -------------------------------------
 const now = useClock(1000)
 const shipments = ref<Shipment[]>([])
+const deliveredToday = ref(0)
 async function loadShipments() {
   try {
     const { data } = await api.get('/shipments')
     shipments.value = data.data
+    deliveredToday.value = data.delivered_today ?? 0
   } catch { /* best-effort */ }
 }
 // On the road, soonest arrival first.
@@ -653,8 +655,9 @@ onUnmounted(() => clearInterval(poll))
          Just the four headline numbers — no route list, keeps it tiny. -->
     <div v-if="onTheRoad.length" class="lg:hidden glass !p-3">
       <div class="flex items-center justify-between gap-2">
-        <span class="text-sm font-semibold">
-          On the Road <span class="chip bg-brand/15 text-brand-soft ml-1">{{ onTheRoad.length }}</span>
+        <span class="text-sm font-semibold flex items-center gap-2">
+          On the Road <span class="chip bg-brand/15 text-brand-soft">{{ onTheRoad.length }}</span>
+          <span class="text-[10px] font-normal text-gain">✅ {{ deliveredToday }} today</span>
         </span>
         <span class="font-mono text-xs" :class="roadTotals.profit >= 0 ? 'text-gain' : 'text-loss'">
           {{ credits(roadTotals.profit) }} profit
@@ -865,8 +868,9 @@ onUnmounted(() => clearInterval(poll))
      <!-- On the road: route + time left, soonest first (desktop; mobile uses
           the compact summary above the contracts instead). -->
      <div class="hidden lg:block glass p-4">
-       <h3 class="font-semibold text-sm mb-2">
-         On the Road <span class="chip bg-brand/15 text-brand-soft ml-1">{{ onTheRoad.length }}</span>
+       <h3 class="font-semibold text-sm mb-2 flex items-center justify-between gap-2">
+         <span>On the Road <span class="chip bg-brand/15 text-brand-soft ml-1">{{ onTheRoad.length }}</span></span>
+         <span class="text-[11px] font-normal text-gain">✅ {{ deliveredToday }} done today</span>
        </h3>
 
        <!-- Headline totals for everything currently on the road, up top. -->

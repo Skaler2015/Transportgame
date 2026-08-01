@@ -37,7 +37,14 @@ class ShipmentController extends Controller
             ->limit(40)
             ->get();
 
-        return ShipmentResource::collection($shipments);
+        // Deliveries settled today (on time or late) — shown on the board.
+        $deliveredToday = Shipment::where('company_id', $company->id)
+            ->whereIn('status', [Shipment::STATUS_DELIVERED, Shipment::STATUS_LATE])
+            ->where('arrived_at', '>=', now()->startOfDay())
+            ->count();
+
+        return ShipmentResource::collection($shipments)
+            ->additional(['delivered_today' => $deliveredToday]);
     }
 
     /** Dispatch a vehicle + driver against an accepted contract. */
