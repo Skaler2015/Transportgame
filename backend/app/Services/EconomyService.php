@@ -4,8 +4,10 @@ namespace App\Services;
 
 use App\Models\City;
 use App\Models\Commodity;
+use App\Models\Company;
 use App\Models\Contract;
 use App\Models\MarketPrice;
+use App\Models\Vehicle;
 use App\Models\WorldEvent;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -273,7 +275,7 @@ class EconomyService
      * Create one contract hauling $commodity from $origin to the most
      * profitable reachable consumer city. Returns the Contract or null.
      */
-    protected function mintContract(City $origin, Commodity $commodity, Collection $cities, array $priceLookup, Collection $events): ?Contract
+    protected function mintContract(City $origin, Commodity $commodity, Collection $cities, array $priceLookup, Collection $events, ?float $maxTonnes = null): ?Contract
     {
         $cfg = config('transoria.contracts');
         $cfgShip = config('transoria.shipment');
@@ -318,7 +320,20 @@ class EconomyService
         ];
         [$lo, $hi] = $bands[array_rand($bands)];
         $targetTonnes = $lo + (mt_rand() / mt_getrandmax()) * ($hi - $lo);
+        // Cap the load so a specific truck can physically haul it (used when
+        // guaranteeing local work for an idle vehicle of a known capacity).
+        if ($maxTonnes !== null) {
+            $targetTonnes = min($targetTonnes, $maxTonnes);
+        }
         $units = max(1, (int) round($targetTonnes / max(0.05, $commodity->weight_per_unit)));
+        if ($maxTonnes !== null) {
+            while ($units > 1 && $units * $commodity->weight_per_unit > $maxTonnes + 0.001) {
+                $units--;
+            }
+            if ($units * $commodity->weight_per_unit > $maxTonnes + 0.001) {
+                return null; // even a single unit is too heavy for this truck
+            }
+        }
 
         $isRush = random_int(1, 100) <= 22;
 
@@ -402,5 +417,74 @@ class EconomyService
         return Contract::where('status', Contract::STATUS_OPEN)
             ->where('expires_at', '<=', now())
             ->update(['status' => Contract::STATUS_EXPIRED]);
+    }
+
+    /** Latest price per [commodity_id][city_id] from the market history. */
+    private function buildPriceLookup(): array
+    {
+        $lookup = [];
+        foreach (MarketPrice::query()
+            ->select('city_id', 'commodity_id', 'price', 'recorded_at')
+            ->orderByDesc('recorded_at')
+            ->get() as $mp) {
+            $lookup[$mp->commodity_id][$mp->city_id] ??= $mp->price;
+        }
+
+        return $lookup;
+    }
+
+    /**
+     * Guarantee that every city where the company has a FREE (idle) truck offers
+     * a few open jobs that truck can actually haul — so a parked vehicle always
+     * has local work to pick up, instead of being stranded with nothing to do.
+     * Returns the number of contracts minted.
+     */
+    public function ensureLocalWorkForIdleFleet(Company $company, int $targetPerCity = 4): int
+    {
+        $idle = Vehicle::where('company_id', $company->id)
+            ->where('status', Vehicle::STATUS_IDLE)
+            ->where('condition', '>', 15)
+            ->with('model', 'city')->get();
+
+        if ($idle->isEmpty()) {
+            return 0;
+        }
+
+        $cities = City::all();
+        $priceLookup = $this->buildPriceLookup();
+        $events = WorldEvent::active()->get();
+        $commodities = Commodity::all();
+        $created = 0;
+
+        foreach ($idle->groupBy('city_id') as $group) {
+            $origin = $group->first()->city;
+            if (! $origin) {
+                continue;
+            }
+            $maxCap = (float) $group->max(fn (Vehicle $v) => $v->effectiveCapacityWeight());
+
+            // Open jobs from this city at least one idle truck here can haul.
+            $have = Contract::onMarket()
+                ->where('origin_city_id', $origin->id)
+                ->with('commodity')->get()
+                ->filter(fn (Contract $c) => $group->contains(fn (Vehicle $v) => $c->commodity->canBeCarriedBy($v->model)
+                    && $c->commodity->weight_per_unit * $c->units <= $v->effectiveCapacityWeight() + 0.001))
+                ->count();
+
+            // Commodities at least one idle truck here can carry.
+            $carriable = $commodities->filter(fn (Commodity $cm) => $group->contains(fn (Vehicle $v) => $cm->canBeCarriedBy($v->model)));
+            if ($carriable->isEmpty()) {
+                continue;
+            }
+
+            for ($i = $have; $i < $targetPerCity; $i++) {
+                $commodity = $carriable->random();
+                if ($this->mintContract($origin, $commodity, $cities, $priceLookup, $events, $maxCap)) {
+                    $created++;
+                }
+            }
+        }
+
+        return $created;
     }
 }

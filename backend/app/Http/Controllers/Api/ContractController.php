@@ -49,6 +49,10 @@ class ContractController extends Controller
         // up open contracts when a player looks at the board (rate-limited).
         $this->ensureMarketFresh();
 
+        // Guarantee a free truck always has haulable jobs starting from where it
+        // is parked (rate-limited per company).
+        $this->ensureLocalWork($company);
+
         $query = Contract::onMarket()->with(['commodity', 'origin', 'destination'])
             // Only domestic contracts — origin city in the player's country.
             ->whereHas('origin', fn ($q) => $q->where('country', $company->country));
@@ -132,6 +136,23 @@ class ContractController extends Controller
             $economy->replenishContracts($events);
         } catch (\Throwable $e) {
             Log::error('Market replenish failed: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Ensure each city where the company has a free truck offers a few jobs that
+     * truck can haul. Cheap no-op while on a short per-company cooldown.
+     */
+    private function ensureLocalWork($company): void
+    {
+        if (! Cache::add("local-work:{$company->id}", 1, now()->addSeconds(20))) {
+            return;
+        }
+
+        try {
+            app(EconomyService::class)->ensureLocalWorkForIdleFleet($company);
+        } catch (\Throwable $e) {
+            Log::error('Local-work top-up failed: '.$e->getMessage());
         }
     }
 

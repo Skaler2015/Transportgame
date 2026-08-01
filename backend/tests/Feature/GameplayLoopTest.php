@@ -328,6 +328,31 @@ class GameplayLoopTest extends TestCase
         $this->assertGreaterThan(0, $shipment->fresh()->service_cost);
     }
 
+    public function test_market_guarantees_local_work_where_a_free_truck_is_parked(): void
+    {
+        // A free truck must always have jobs starting from its own city.
+        $token = $this->postJson('/api/register', [
+            'name' => 'Local', 'email' => 'local@transoria.io',
+            'password' => 'password123', 'company_name' => 'Local Freight',
+        ])->json('token');
+
+        $company = User::where('email', 'local@transoria.io')->first()->company;
+        $truck = $company->vehicles()->where('status', Vehicle::STATUS_IDLE)->with('model')->first();
+        $hqId = $company->headquarters_city_id;
+
+        // Viewing the board triggers the local-work guarantee.
+        $this->withToken($token)->getJson('/api/contracts')->assertOk();
+
+        $localHaulable = Contract::onMarket()
+            ->where('origin_city_id', $hqId)
+            ->with('commodity')->get()
+            ->filter(fn (Contract $c) => $c->commodity->canBeCarriedBy($truck->model)
+                && $c->commodity->weight_per_unit * $c->units <= $truck->effectiveCapacityWeight() + 0.001);
+
+        $this->assertGreaterThan(0, $localHaulable->count(),
+            'A free truck should always find haulable jobs starting from its city.');
+    }
+
     public function test_haulable_filter_only_returns_jobs_an_idle_truck_can_carry(): void
     {
         // "Only what my fleet can haul" must reflect what a FREE truck can take

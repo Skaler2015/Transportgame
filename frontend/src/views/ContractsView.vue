@@ -22,7 +22,9 @@ const accepting = ref<number | null>(null)
 const dispatching = ref<number | null>(null)
 const filters = ref({ origin_city_id: '', commodity_id: '', sort: 'payout' })
 const haulableOnly = ref(true)
-const backhaulOnly = ref(false)
+// On by default: show jobs starting where your trucks are (parked or arriving),
+// so a free truck always sees local work first. Untick to see the whole market.
+const backhaulOnly = ref(true)
 
 // Your HQ city — newly bought trucks spawn here, so "jobs leaving HQ" is the
 // natural first-leg view. Toggling it just pins the origin filter to HQ.
@@ -265,7 +267,7 @@ async function dispatchNow(c: Contract) {
     })
     toast.success('Dispatched! Truck is rolling.')
     contracts.value = contracts.value.filter((x) => x.id !== c.id)
-    await loadFleet()
+    await Promise.all([loadFleet(), loadShipments()])
     load(true)
     game.refreshDashboard().catch(() => {})
   } catch (e) {
