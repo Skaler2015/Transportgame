@@ -136,6 +136,12 @@ class WorldSync extends Command
         ]);
         $this->info("Issued papers to {$papered} existing vehicles.");
 
+        // 8. Give existing drivers a valid licence so nobody drives illegally.
+        $licensed = \App\Models\Driver::whereNull('licence_until')->update([
+            'licence_until' => now()->addDays((int) config('transoria.driver.licence_days', 30)),
+        ]);
+        $this->info("Licensed {$licensed} existing drivers.");
+
         $this->info('World sync complete.');
 
         return self::SUCCESS;

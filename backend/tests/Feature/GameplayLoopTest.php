@@ -371,6 +371,33 @@ class GameplayLoopTest extends TestCase
         $this->assertSame(Contract::STATUS_IN_PROGRESS, $contract->fresh()->status);
     }
 
+    public function test_driver_hr_actions_train_renew_and_rest(): void
+    {
+        $user = User::factory()->create();
+        $company = app(CompanyService::class)->found($user, 'HR Co');
+        $hr = app(\App\Services\DriverService::class);
+
+        $driver = $company->drivers()->first();
+        $this->assertTrue($driver->isLicensed(), 'A hired driver starts licensed.');
+
+        // Training raises skill.
+        $skillBefore = $driver->skill;
+        $hr->train($company->fresh(), $driver->fresh());
+        $this->assertGreaterThan($skillBefore, $driver->fresh()->skill);
+
+        // Licence renewal extends the expiry.
+        $driver->update(['licence_until' => now()->subDay()]);
+        $this->assertFalse($driver->fresh()->isLicensed());
+        $hr->renewLicence($company->fresh(), $driver->fresh());
+        $this->assertTrue($driver->fresh()->isLicensed());
+
+        // Vacation restores health and clears fatigue.
+        $driver->update(['health' => 40, 'fatigue' => 70]);
+        $hr->vacation($company->fresh(), $driver->fresh());
+        $this->assertSame(100, (int) $driver->fresh()->health);
+        $this->assertSame(0, (int) $driver->fresh()->fatigue);
+    }
+
     public function test_garage_services_restore_health_and_renew_papers(): void
     {
         $user = User::factory()->create();

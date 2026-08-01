@@ -143,13 +143,21 @@ export interface Trailer {
 export interface Driver {
   id: number
   name: string
+  age?: number
   avatar_seed: string | null
   status: string
+  rank?: string
+  experience?: number
   skill: number
+  rain_skill?: number
+  eco_skill?: number
   morale: number
   fatigue: number
+  health?: number
   loyalty: number
   hazmat_licence: boolean
+  licence_until?: string | null
+  is_licensed?: boolean
   salary: number
   shipments_done: number
   available: boolean

@@ -82,6 +82,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/drivers', [DriverController::class, 'index']);
     Route::post('/drivers/hire', [DriverController::class, 'hire']);
+    Route::post('/drivers/{driver}/action', [DriverController::class, 'action']);
 
     Route::get('/shipments', [ShipmentController::class, 'index']);
     Route::post('/shipments/dispatch', [ShipmentController::class, 'dispatch']);

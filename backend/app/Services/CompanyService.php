@@ -442,13 +442,19 @@ class CompanyService
         return Driver::create([
             'company_id' => $company->id,
             'name' => $name,
+            'age' => random_int(24, 55),
             'avatar_seed' => Str::random(8),
             'status' => Driver::STATUS_AVAILABLE,
             'skill' => random_int($skillFloor, $skillFloor + 40),
+            'rain_skill' => random_int(15, 55),
+            'eco_skill' => random_int(15, 55),
+            'experience' => 0,
+            'health' => 100,
             'morale' => random_int(55, 85),
             'fatigue' => 0,
             'loyalty' => random_int(40, 70),
             'hazmat_licence' => random_int(1, 100) <= 30,
+            'licence_until' => now()->addDays((int) config('transoria.driver.licence_days', 30)),
             'salary' => random_int(1500, 2600) * 100,
         ]);
     }

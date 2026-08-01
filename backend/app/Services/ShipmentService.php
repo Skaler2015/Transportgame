@@ -133,7 +133,9 @@ class ShipmentService
             // Fuel drawn from the vehicle's own tank (electric/hydrogen sip a
             // little; econ 0 models need none). You pay for fuel when you refuel,
             // not per trip — so the tank must already hold enough to make it.
-            $economy = $model->fuel_economy * (1 + ($bonuses['fuel_economy'] ?? 0)) * $engineFuel;
+            // A fuel-savvy driver sips less (eco_skill up to -20%).
+            $ecoDriver = 1 - ($driver->eco_skill ?? 0) / 500;
+            $economy = $model->fuel_economy * (1 + ($bonuses['fuel_economy'] ?? 0)) * $engineFuel * $ecoDriver;
             $fuelBudget = max(0, $distance * $economy);
 
             if ($fuelBudget > 0 && $vehicle->fuel + 0.001 < $fuelBudget) {
@@ -219,11 +221,14 @@ class ShipmentService
             $breakdownChance = $cfg['breakdown_base_chance'] * (2 - $reliability)
                 * (1 + ($bonuses['breakdown_chance'] ?? 0))
                 * (1 + ($oilLow ? 0.6 : 0) + ($batteryLow ? 0.4 : 0));
+            $wetWeather = $weatherRisk > 1;
             $accidentChance = $cfg['accident_base_chance']
                 * (1 + ($driver->fatigue / 100))
                 * $weatherRisk
                 * (1 - $driver->skill / 300)
-                * (1 + (! $vehicle->isRegistered() ? 0.25 : 0));
+                * (1 - ($wetWeather ? ($driver->rain_skill ?? 0) / 250 : 0)) // wet-weather specialist
+                * (1 + (! $vehicle->isRegistered() ? 0.25 : 0))
+                * (1 + (! $driver->isLicensed() ? 0.30 : 0));               // unlicensed = risky
 
             $failed = false;
             $repairCost = 0;
@@ -334,6 +339,8 @@ class ShipmentService
             // --- Driver ---------------------------------------------------------
             $driver->fatigue = min(100, $driver->fatigue + $cfg['fatigue_gain_per_trip']);
             $driver->shipments_done++;
+            $driver->experience += 1;                                   // every trip builds a career
+            $driver->health = max(0, $driver->health - ($failed ? 8 : 2)); // wears down; vacation restores
             if (! $failed) {
                 $skillGain = 1 + (int) round(($bonuses['driver_skill_gain'] ?? 0) * 2);
                 $driver->skill = min(100, $driver->skill + $skillGain);

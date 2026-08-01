@@ -12,10 +12,16 @@ class Driver extends Model
 
     protected $casts = [
         'skill' => 'integer',
+        'rain_skill' => 'integer',
+        'eco_skill' => 'integer',
         'morale' => 'integer',
         'fatigue' => 'integer',
+        'health' => 'integer',
         'loyalty' => 'integer',
+        'age' => 'integer',
+        'experience' => 'integer',
         'hazmat_licence' => 'boolean',
+        'licence_until' => 'datetime',
         'salary' => 'integer',
         'shipments_done' => 'integer',
     ];
@@ -23,6 +29,26 @@ class Driver extends Model
     public const STATUS_AVAILABLE = 'available';
     public const STATUS_DRIVING = 'driving';
     public const STATUS_RESTING = 'resting';
+
+    public function isLicensed(): bool
+    {
+        return $this->licence_until !== null && $this->licence_until->isFuture();
+    }
+
+    /** Career rank derived from accumulated experience. */
+    public function rank(): string
+    {
+        $xp = (int) $this->experience;
+        $ranks = config('transoria.driver.ranks', []);
+        $name = 'Rookie';
+        foreach ($ranks as $r) {
+            if ($xp >= $r['xp']) {
+                $name = $r['name'];
+            }
+        }
+
+        return $name;
+    }
 
     public function company(): BelongsTo
     {

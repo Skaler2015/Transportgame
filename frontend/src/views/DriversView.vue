@@ -10,10 +10,25 @@ const game = useGameStore()
 const toast = useToastStore()
 const drivers = ref<Driver[]>([])
 const hiring = ref(false)
+const working = ref<number | null>(null)
 
 async function load() {
   const { data } = await api.get('/drivers')
   drivers.value = data.data
+}
+
+async function action(d: Driver, type: 'train' | 'licence' | 'vacation') {
+  working.value = d.id
+  try {
+    const { data } = await api.post(`/drivers/${d.id}/action`, { action: type })
+    toast.success(data.message)
+    await load()
+    game.refreshDashboard().catch(() => {})
+  } catch (e) {
+    toast.error(apiError(e))
+  } finally {
+    working.value = null
+  }
 }
 
 async function hire() {
@@ -58,7 +73,9 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
           </div>
           <div class="min-w-0 flex-1">
             <p class="font-semibold text-sm truncate">{{ d.name }}</p>
-            <p class="text-[11px] text-slate-400">{{ num(d.shipments_done) }} runs · {{ credits(d.salary) }}/cycle</p>
+            <p class="text-[11px] text-slate-400">
+              <span class="text-brand-soft">{{ d.rank || 'Rookie' }}</span> · age {{ d.age ?? '—' }} · {{ num(d.shipments_done) }} runs
+            </p>
           </div>
           <span class="chip capitalize" :class="statusChip[d.status]">{{ d.status }}</span>
         </div>
@@ -66,9 +83,9 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
         <div class="mt-3 space-y-2">
           <div v-for="stat in [
             { label: 'Skill', val: d.skill, invert: false },
+            { label: 'Health', val: d.health ?? 100, invert: false },
             { label: 'Morale', val: d.morale, invert: false },
             { label: 'Fatigue', val: d.fatigue, invert: true },
-            { label: 'Loyalty', val: d.loyalty, invert: false },
           ]" :key="stat.label">
             <div class="flex justify-between text-[11px] mb-1"><span class="text-slate-400">{{ stat.label }}</span><span class="font-mono">{{ stat.val }}</span></div>
             <div class="h-1.5 rounded-full bg-ink-700 overflow-hidden">
@@ -77,8 +94,23 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
           </div>
         </div>
 
-        <div v-if="d.hazmat_licence" class="mt-3">
-          <span class="chip bg-loss/15 text-loss">☣ Hazmat certified</span>
+        <div class="grid grid-cols-2 gap-2 mt-3 text-center text-[11px]">
+          <div><p class="stat-label">🌧 Rain</p><p class="font-mono">{{ d.rain_skill ?? 0 }}</p></div>
+          <div><p class="stat-label">⛽ Eco</p><p class="font-mono">{{ d.eco_skill ?? 0 }}</p></div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-1.5 mt-3">
+          <span class="chip" :class="d.is_licensed ? 'bg-gain/20 text-gain' : 'bg-loss/20 text-loss'">
+            {{ d.is_licensed ? '📋 Licensed' : '⚠ Licence expired' }}
+          </span>
+          <span v-if="d.hazmat_licence" class="chip bg-loss/15 text-loss">☣ Hazmat</span>
+        </div>
+
+        <!-- HR actions -->
+        <div class="grid grid-cols-3 gap-1.5 mt-3 pt-3 border-t border-white/5">
+          <button class="btn-ghost !py-1 text-[10px]" :disabled="working === d.id" @click="action(d, 'train')">🎓 Train</button>
+          <button class="btn-ghost !py-1 text-[10px]" :class="!d.is_licensed && 'ring-1 ring-loss/50'" :disabled="working === d.id" @click="action(d, 'licence')">📋 Licence</button>
+          <button class="btn-ghost !py-1 text-[10px]" :disabled="working === d.id || d.status === 'driving'" @click="action(d, 'vacation')">🏖 Rest</button>
         </div>
       </div>
       <div v-if="!drivers.length" class="glass p-8 text-center text-slate-400 col-span-full">No crew yet.</div>

@@ -14,7 +14,7 @@ return [
     // deploy the app notices the stored marker no longer matches and runs
     // `migrate --force` + `transoria:worldsync` once, so shared hosts that
     // never run the CLI still stay fully migrated. See EnsureSchemaUpToDate.
-    'schema_version' => '2026.08.05-vehicle-depth',
+    'schema_version' => '2026.08.06-driver-careers',
 
     // In-game currency label.
     'currency' => ['code' => 'CR', 'symbol' => '₡', 'name' => 'Credits'],
@@ -231,6 +231,23 @@ return [
         'low_warning_pct' => 0.25,
         // Small handling margin added when refuelling to be safe on a trip.
         'refuel_headroom' => 1.0,
+    ],
+
+    // Driver careers.
+    'driver' => [
+        'train_cost' => 12_000_00,     // ₡ cents to send a driver on a training course
+        'train_skill_gain' => 6,       // skill points per course
+        'train_specialty_gain' => 5,   // rain/eco points per course (rotates)
+        'licence_days' => 30,          // how long a licence renewal lasts (real days)
+        'licence_cost' => 15_000_00,   // ₡ cents to renew a driving licence
+        'vacation_cost' => 8_000_00,   // ₡ cents — restores health, morale, fatigue
+        'ranks' => [
+            ['name' => 'Rookie', 'xp' => 0],
+            ['name' => 'Pro', 'xp' => 50],
+            ['name' => 'Veteran', 'xp' => 150],
+            ['name' => 'Elite', 'xp' => 400],
+            ['name' => 'Legend', 'xp' => 1000],
+        ],
     ],
 
     // Guilds.
