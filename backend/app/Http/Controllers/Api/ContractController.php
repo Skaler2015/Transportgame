@@ -85,16 +85,16 @@ class ContractController extends Controller
         $arrivingCityIds = $inbound->pluck('contract.destination_city_id')->filter()->unique()->flip();
         $fleetCityIds = $idleCityIds->keys()->merge($arrivingCityIds->keys())->unique()->flip();
 
-        // Trucks that can take fresh work now or once they arrive.
-        $haulFleet = $idleFleet->merge($inbound->pluck('vehicle')->filter())->values();
-
         $wantHaulable = filter_var($filters['haulable'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $wantBackhaul = filter_var($filters['backhaul'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
         $contracts = $query->limit(300)->get();
 
+        // "Only what my fleet can haul" means what an IDLE truck can take RIGHT
+        // NOW — so a small free truck sees the light loads it can actually
+        // dispatch, not heavy jobs only a bigger truck (still en route) could do.
         if ($wantHaulable) {
-            $contracts = $contracts->filter(fn (Contract $c) => $this->haulableBy($c, $haulFleet));
+            $contracts = $contracts->filter(fn (Contract $c) => $this->haulableBy($c, $idleFleet));
         }
 
         // Flag jobs starting where a truck is (idle) or is heading (arriving).

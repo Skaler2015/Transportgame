@@ -328,6 +328,36 @@ class GameplayLoopTest extends TestCase
         $this->assertGreaterThan(0, $shipment->fresh()->service_cost);
     }
 
+    public function test_haulable_filter_only_returns_jobs_an_idle_truck_can_carry(): void
+    {
+        // "Only what my fleet can haul" must reflect what a FREE truck can take
+        // now — not heavy jobs only a bigger, still-en-route truck could do.
+        $token = $this->postJson('/api/register', [
+            'name' => 'Small', 'email' => 'small@transoria.io',
+            'password' => 'password123', 'company_name' => 'Small Freight',
+        ])->json('token');
+
+        $company = User::where('email', 'small@transoria.io')->first()->company;
+        for ($i = 0; $i < 4; $i++) {
+            $this->artisan('world:tick');
+        }
+
+        $idleCap = $company->vehicles()->where('status', Vehicle::STATUS_IDLE)
+            ->with('model')->get()
+            ->max(fn (Vehicle $v) => $v->effectiveCapacityWeight());
+        $this->assertNotNull($idleCap);
+
+        $rows = $this->withToken($token)->getJson('/api/contracts?haulable=1')->json('data');
+
+        foreach ($rows as $c) {
+            $this->assertLessThanOrEqual(
+                $idleCap + 0.001,
+                $c['total_weight'],
+                "Contract {$c['id']} ({$c['total_weight']}t) exceeds the idle fleet's capacity ({$idleCap}t)."
+            );
+        }
+    }
+
     public function test_cannot_dispatch_cargo_that_exceeds_vehicle_capacity(): void
     {
         $user = User::factory()->create();
