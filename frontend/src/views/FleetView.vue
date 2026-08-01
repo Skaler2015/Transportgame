@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
@@ -91,6 +91,24 @@ const MODE_ICON: Record<string, string> = { road: '🚚', rail: '🚆', sea: '�
 const TRAILER_ICON: Record<string, string> = {
   box: '📦', reefer: '❄️', tanker: '🛢️', flatbed: '🏗️', container: '🚛', car_carrier: '🚗',
 }
+
+// How many of each model the company already owns (keyed by model id).
+const ownedVehicles = computed(() => {
+  const m: Record<number, number> = {}
+  for (const v of vehicles.value) {
+    const id = v.model?.id
+    if (id) m[id] = (m[id] || 0) + 1
+  }
+  return m
+})
+const ownedTrailers = computed(() => {
+  const m: Record<number, number> = {}
+  for (const t of trailers.value) {
+    const id = t.model?.id
+    if (id) m[id] = (m[id] || 0) + 1
+  }
+  return m
+})
 
 function barColor(v: number) {
   return v > 60 ? 'bg-gain' : v > 30 ? 'bg-gold' : 'bg-loss'
@@ -224,7 +242,12 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
             <p class="font-semibold text-sm">{{ MODE_ICON[m.mode] }} {{ m.name }}</p>
             <p class="text-[11px] text-slate-400">{{ m.brand }} · {{ powertrainIcon[m.powertrain] }} {{ m.powertrain }} · {{ m.needs_trailer ? 'tractor' : 'rigid' }}</p>
           </div>
-          <span class="chip bg-white/5 text-slate-300 capitalize">{{ m.mode }}</span>
+          <div class="flex flex-col items-end gap-1">
+            <span class="chip bg-white/5 text-slate-300 capitalize">{{ m.mode }}</span>
+            <span class="chip" :class="ownedVehicles[m.id] ? 'bg-gain/20 text-gain' : 'bg-white/5 text-slate-500'">
+              You own {{ ownedVehicles[m.id] || 0 }}
+            </span>
+          </div>
         </div>
 
         <div class="grid grid-cols-2 gap-2 mt-3 text-[11px]">
@@ -252,6 +275,9 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
             <p class="font-semibold text-sm">{{ TRAILER_ICON[m.type] }} {{ m.name }}</p>
             <p class="text-[11px] text-slate-400 capitalize">{{ m.type.replace('_', ' ') }} trailer</p>
           </div>
+          <span class="chip" :class="ownedTrailers[m.id] ? 'bg-gain/20 text-gain' : 'bg-white/5 text-slate-500'">
+            You own {{ ownedTrailers[m.id] || 0 }}
+          </span>
         </div>
 
         <div class="grid grid-cols-2 gap-2 mt-3 text-[11px]">
