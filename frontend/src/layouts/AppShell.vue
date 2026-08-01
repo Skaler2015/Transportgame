@@ -59,12 +59,27 @@ const xpPct = computed(() => {
 
 let poll: number | undefined
 
+// Floating "back to top" button — appears once the page is scrolled down a
+// bit so mobile players can jump up without swiping (route change resets it).
+const showTop = ref(false)
+function onScroll() {
+  showTop.value = window.scrollY > 400
+}
+function scrollTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+watch(() => route.fullPath, () => { showTop.value = false })
+
 onMounted(async () => {
+  window.addEventListener('scroll', onScroll, { passive: true })
   await game.loadReference().catch(() => {})
   await game.refreshDashboard().catch((e) => toast.error(apiError(e)))
   poll = window.setInterval(() => game.refreshDashboard().catch(() => {}), 12000)
 })
-onUnmounted(() => clearInterval(poll))
+onUnmounted(() => {
+  clearInterval(poll)
+  window.removeEventListener('scroll', onScroll)
+})
 
 async function advance() {
   try {
@@ -189,6 +204,24 @@ async function logout() {
 
     <!-- One-time welcome walkthrough for brand-new companies -->
     <TutorialCoach />
+
+    <!-- Floating scroll-to-top for mobile: jump back up without swiping.
+         Sits just above the bottom tab bar; fades in past 400px scroll. -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-200" leave-active-class="transition duration-150"
+        enter-from-class="opacity-0 translate-y-2" leave-to-class="opacity-0 translate-y-2"
+      >
+        <button
+          v-if="showTop"
+          type="button"
+          aria-label="Back to top"
+          class="lg:hidden fixed right-4 z-40 h-11 w-11 rounded-full bg-brand text-ink-950 shadow-glow flex items-center justify-center text-xl font-bold active:scale-95 transition"
+          style="bottom: calc(5rem + env(safe-area-inset-bottom))"
+          @click="scrollTop"
+        >↑</button>
+      </Transition>
+    </Teleport>
 
     <!-- Mobile bottom tab bar (hidden on lg where the sidebar shows).
          Teleported to <body> so `position: fixed` is relative to the viewport
