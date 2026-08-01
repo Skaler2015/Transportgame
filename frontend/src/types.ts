@@ -191,6 +191,7 @@ export interface Shipment {
   distance_km: number
   avg_speed: number
   projected_payout: number
+  service_cost?: number
   weather_snapshot: string
   progress_percent: number
   departed_at: string

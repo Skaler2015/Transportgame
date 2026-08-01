@@ -324,7 +324,10 @@ onUnmounted(() => clearInterval(poll))
           </div>
           <div class="text-right shrink-0">
             <p class="font-semibold uppercase text-xs" :class="statusStyle[s.status]">{{ s.status }}</p>
-            <p class="font-mono text-[11px] text-slate-400">{{ credits(s.projected_payout) }}</p>
+            <p class="font-mono text-[11px] text-gold">{{ credits(s.projected_payout) }}</p>
+            <p v-if="(s.service_cost ?? 0) > 0" class="font-mono text-[10px] text-loss" title="Auto service & fuel charged on arrival">
+              🔧 −{{ credits(s.service_cost ?? 0) }}
+            </p>
           </div>
         </div>
       </div>

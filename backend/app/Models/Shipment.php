@@ -15,6 +15,7 @@ class Shipment extends Model
         'avg_speed' => 'float',
         'fuel_budget' => 'float',
         'projected_payout' => 'integer',
+        'service_cost' => 'integer',
         'event_log' => 'array',
         'departed_at' => 'datetime',
         'eta_at' => 'datetime',

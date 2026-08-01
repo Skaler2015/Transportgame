@@ -48,7 +48,8 @@ class EnsureSchemaUpToDate
                 && Schema::hasColumn('vehicles', 'registered_until')
                 && Schema::hasColumn('drivers', 'licence_until')
                 && Schema::hasColumn('warehouses', 'staff_level')
-                && Schema::hasTable('listed_companies');
+                && Schema::hasTable('listed_companies')
+                && Schema::hasColumn('shipments', 'service_cost');
         } catch (\Throwable $e) {
             // DB momentarily unreachable — don't trigger a migrate storm.
             return true;

@@ -14,7 +14,7 @@ return [
     // deploy the app notices the stored marker no longer matches and runs
     // `migrate --force` + `transoria:worldsync` once, so shared hosts that
     // never run the CLI still stay fully migrated. See EnsureSchemaUpToDate.
-    'schema_version' => '2026.08.08-stock-exchange',
+    'schema_version' => '2026.08.09-auto-service',
 
     // In-game currency label.
     'currency' => ['code' => 'CR', 'symbol' => '₡', 'name' => 'Credits'],
@@ -103,6 +103,9 @@ return [
         'tire_loss_per_1000km' => 9.0,
         'fatigue_gain_per_trip' => 12,
         'xp_per_shipment' => 40,
+        // Auto full-service & refuel the truck the moment a run ends, so upkeep
+        // is charged as a small per-trip line item instead of a lump sum later.
+        'auto_service_on_arrival' => true,
     ],
 
     // Research tree. Each node: cost in research points, prerequisites, and the

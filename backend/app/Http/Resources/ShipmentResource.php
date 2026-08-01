@@ -19,6 +19,7 @@ class ShipmentResource extends JsonResource
             'distance_km' => (float) $this->distance_km,
             'avg_speed' => (float) $this->avg_speed,
             'projected_payout' => (int) $this->projected_payout,
+            'service_cost' => (int) $this->service_cost,
             'weather_snapshot' => $this->weather_snapshot,
             'progress_percent' => $livePercent,
             'departed_at' => $this->departed_at?->toIso8601String(),

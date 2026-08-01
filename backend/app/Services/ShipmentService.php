@@ -30,6 +30,7 @@ class ShipmentService
         private readonly LedgerService $ledger,
         private readonly ResearchService $research,
         private readonly MissionService $missions,
+        private readonly GarageService $garage,
     ) {}
 
     /**
@@ -339,6 +340,21 @@ class ShipmentService
             $vehicle->city_id = $contract->destination_city_id;
             $vehicle->save();
 
+            // Auto full-service & refuel on arrival: charge this trip's wear and
+            // fuel now, as a small line item, so the player never faces a big
+            // maintenance bill later. Best-effort — if cash is short we simply
+            // skip it (the truck can be serviced manually) rather than fail the run.
+            $serviceCost = 0;
+            if (config('transoria.shipment.auto_service_on_arrival', true)) {
+                try {
+                    $result = $this->garage->fullService($company, $vehicle->fresh(['model', 'city']));
+                    $serviceCost = (int) $result['cost'];
+                    $vehicle = $result['vehicle'];
+                } catch (RuntimeException $e) {
+                    // Nothing to service, or not enough cash — leave as-is.
+                }
+            }
+
             // Release the trailer back to the yard at the destination, with wear.
             if ($shipment->trailer_id) {
                 $trailer = $shipment->trailer()->with('model')->first();
@@ -370,6 +386,7 @@ class ShipmentService
             $shipment->progress_km = $shipment->distance_km;
             $shipment->arrived_at = $arrivedAt;
             $shipment->event_log = $log;
+            $shipment->service_cost = $serviceCost;
             $shipment->save();
 
             $this->applyLevelUps($company);

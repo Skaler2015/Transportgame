@@ -294,6 +294,42 @@ class GameplayLoopTest extends TestCase
         $this->assertTrue($flagged['fleet_arriving'], 'It should read as arriving (truck still en route).');
     }
 
+    public function test_completing_a_run_auto_services_the_truck_and_records_the_cost(): void
+    {
+        // On arrival the truck is auto-serviced & refuelled, charged as a small
+        // per-run line item recorded on the shipment — no big lump sum later.
+        $user = User::factory()->create();
+        $companyService = app(CompanyService::class);
+        $shipmentService = app(ShipmentService::class);
+
+        $company = $companyService->found($user, 'Upkeep Co');
+        $vehicle = $company->vehicles()->with('model')->first();
+        $driver = $company->drivers()->first();
+
+        $contract = null;
+        for ($i = 0; $i < 8 && ! $contract; $i++) {
+            $this->artisan('world:tick');
+            $contract = Contract::onMarket()
+                ->where('origin_city_id', $company->headquarters_city_id)
+                ->with('commodity')->get()
+                ->first(fn (Contract $c) => $this->fits($c, $vehicle));
+        }
+        $this->assertNotNull($contract);
+
+        $companyService->acceptContract($company, $contract);
+        $shipment = $shipmentService->dispatch($company, $contract, $vehicle, $driver);
+
+        $shipment->update(['eta_at' => now()->subMinute(), 'deadline_at' => now()->addYear()]);
+        $shipmentService->resolve($shipment->fresh());
+
+        $v = $vehicle->fresh();
+        // Truck came back fully serviced & fuelled...
+        $this->assertEquals(100, $v->condition);
+        $this->assertEquals((float) $v->model->fuel_capacity, (float) $v->fuel);
+        // ...and the cost was recorded against the run.
+        $this->assertGreaterThan(0, $shipment->fresh()->service_cost);
+    }
+
     public function test_cannot_dispatch_cargo_that_exceeds_vehicle_capacity(): void
     {
         $user = User::factory()->create();
