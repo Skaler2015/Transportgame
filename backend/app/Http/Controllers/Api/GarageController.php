@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Concerns\ResolvesCompany;
 use App\Http\Controllers\Controller;
+use App\Models\Trailer;
 use App\Models\Vehicle;
 use App\Services\GarageService;
 use Illuminate\Http\Request;
@@ -25,6 +26,18 @@ class GarageController extends Controller
         }
 
         return response()->json(['message' => 'Vehicle fully serviced.']);
+    }
+
+    public function repairTrailer(Request $request, Trailer $trailer)
+    {
+        $company = $this->company($request);
+        try {
+            $this->garage->repairTrailer($company, $trailer);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['message' => 'Trailer fully serviced.']);
     }
 
     public function upgrade(Request $request, Vehicle $vehicle)

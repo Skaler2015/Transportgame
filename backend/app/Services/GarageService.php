@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Company;
 use App\Models\LedgerEntry;
+use App\Models\Trailer;
 use App\Models\Vehicle;
 use RuntimeException;
 
@@ -49,6 +50,35 @@ class GarageService
         $vehicle->save();
 
         return $vehicle;
+    }
+
+    /** Restore a trailer's condition to 100, billed per condition point lost. */
+    public function repairTrailer(Company $company, Trailer $trailer): Trailer
+    {
+        if ($trailer->company_id !== $company->id) {
+            throw new RuntimeException('That trailer is not yours.');
+        }
+        if ($trailer->status === Trailer::STATUS_EN_ROUTE) {
+            throw new RuntimeException('Cannot service a trailer that is on the road.');
+        }
+
+        $cfg = config('transoria.garage');
+        $cost = (int) round((100 - $trailer->condition) * $cfg['repair_cost_per_point']);
+        if ($cost <= 0) {
+            throw new RuntimeException('This trailer is already in perfect condition.');
+        }
+        if ($company->cash < $cost) {
+            throw new RuntimeException('Not enough cash for this repair.');
+        }
+
+        $trailer->loadMissing('model');
+        $this->ledger->post($company, LedgerEntry::CAT_UPKEEP,
+            'Serviced '.($trailer->model->name ?? 'trailer'), -$cost, $trailer);
+
+        $trailer->condition = 100;
+        $trailer->save();
+
+        return $trailer;
     }
 
     public const SERVICES = ['oil', 'battery', 'insurance', 'registration'];

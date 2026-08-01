@@ -115,6 +115,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/vehicles/{vehicle}/upgrade', [GarageController::class, 'upgrade']);
     Route::post('/vehicles/{vehicle}/service', [GarageController::class, 'service']);
     Route::post('/vehicles/{vehicle}/full-service', [GarageController::class, 'fullService']);
+    Route::post('/trailers/{trailer}/repair', [GarageController::class, 'repairTrailer']);
 
     // Finance: loans.
     Route::get('/finance', [FinanceController::class, 'index']);

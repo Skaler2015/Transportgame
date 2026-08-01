@@ -154,6 +154,21 @@ const vehiclesNeedingFix = computed(() => freeVehicles.value.filter((v) => vehic
 function scrollToFreeVehicles() {
   document.getElementById('free-vehicles')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
+// Idle trailers and whether each needs a repair (condition below 90).
+const freeTrailers = computed(() => trailers.value.filter((t) => t.available))
+function trailerNeedsRepair(t: Trailer): boolean {
+  return (t.condition ?? 100) < 90
+}
+const servingTrailer = ref<number | null>(null)
+async function fixTrailer(t: Trailer) {
+  servingTrailer.value = t.id
+  try {
+    await api.post(`/trailers/${t.id}/repair`)
+    toast.success(`🔧 Repaired ${t.nickname || t.model?.name}.`)
+    await loadFleet()
+    game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)) } finally { servingTrailer.value = null }
+}
 const servingVeh = ref<number | null>(null)
 // One click fixes exactly what was clicked, right from the Free Vehicles panel.
 async function fixNeed(v: Vehicle, need: string) {
@@ -786,6 +801,30 @@ onUnmounted(() => clearInterval(poll))
          </div>
        </div>
        <p v-else class="text-xs text-slate-500">All trucks are out on the road.</p>
+     </div>
+
+     <!-- Free trailers and where they're parked, with one-click repair. -->
+     <div class="glass p-4">
+       <h3 class="font-semibold text-sm mb-2">
+         Free Trailers <span class="chip bg-gain/15 text-gain ml-1">{{ freeTrailers.length }}</span>
+       </h3>
+       <div v-if="freeTrailers.length" class="divide-y divide-white/5">
+         <div v-for="t in freeTrailers" :key="t.id" class="py-2">
+           <div class="flex items-center justify-between gap-2">
+             <p class="text-xs font-medium truncate">{{ t.nickname || t.model?.name }}</p>
+             <span class="text-[10px] font-mono shrink-0" :class="trailerNeedsRepair(t) ? 'text-loss' : 'text-slate-400'">{{ Math.round(t.condition ?? 100) }}%</span>
+           </div>
+           <p class="text-[11px] text-slate-400 mt-0.5">📍 {{ t.city?.name || '—' }}</p>
+           <div v-if="trailerNeedsRepair(t)" class="mt-1">
+             <button
+               class="chip bg-gold/15 text-gold hover:bg-gold/25 text-[10px] disabled:opacity-40"
+               :disabled="servingTrailer === t.id" @click="fixTrailer(t)">
+               🔧 {{ servingTrailer === t.id ? 'Repairing…' : 'Repair' }}
+             </button>
+           </div>
+         </div>
+       </div>
+       <p v-else class="text-xs text-slate-500">No free trailers right now.</p>
      </div>
    </aside>
   </div>
