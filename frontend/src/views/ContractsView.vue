@@ -111,6 +111,30 @@ function etaLeft(s: Shipment): string {
 // Free (idle) vehicles and where they're parked.
 const freeVehicles = computed(() => vehicles.value.filter((v) => v.available))
 
+// Per-shipment value & estimated profit, and the totals for everything on the
+// road — same cost model as the contract cards (tolls + tax + fuel).
+function shipmentPnl(s: Shipment) {
+  const c = s.contract
+  const dist = s.distance_km || 0
+  const payout = s.projected_payout || 0
+  const tax = Math.round(payout * (c?.destination?.tax_rate ?? 0))
+  const avgToll = ((c?.origin?.toll_per_km ?? 0) + (c?.destination?.toll_per_km ?? 0)) / 2
+  const toll = Math.round(dist * avgToll * 100)
+  const fuel = Math.round(dist * (s.vehicle?.model?.fuel_economy ?? 0) * (c?.origin?.fuel_price ?? 0) * 100)
+  return { payout, profit: payout - tax - toll - fuel }
+}
+const roadTotals = computed(() =>
+  onTheRoad.value.reduce(
+    (acc, s) => {
+      const p = shipmentPnl(s)
+      acc.value += p.payout
+      acc.profit += p.profit
+      return acc
+    },
+    { value: 0, profit: 0 },
+  ),
+)
+
 // ---- compatibility (mirrors Operations) -----------------------------------
 function modeOk(v: Vehicle, c: Contract): boolean {
   const mode = v.model?.mode ?? 'road'
@@ -423,6 +447,20 @@ onUnmounted(() => clearInterval(poll))
          </div>
        </div>
        <p v-else class="text-xs text-slate-500">Nothing en route right now.</p>
+
+       <!-- Totals for everything currently on the road -->
+       <div v-if="onTheRoad.length" class="border-t border-white/10 mt-1 pt-2 space-y-1">
+         <div class="flex items-center justify-between text-xs">
+           <span class="text-slate-400">Total value</span>
+           <span class="font-mono text-gold font-semibold">{{ credits(roadTotals.value) }}</span>
+         </div>
+         <div class="flex items-center justify-between text-xs">
+           <span class="text-slate-400">Total est. profit</span>
+           <span class="font-mono font-semibold" :class="roadTotals.profit >= 0 ? 'text-gain' : 'text-loss'">
+             {{ credits(roadTotals.profit) }}
+           </span>
+         </div>
+       </div>
      </div>
 
      <!-- Free vehicles and where they're parked -->
