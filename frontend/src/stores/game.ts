@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '../api/client'
 import { useAuthStore } from './auth'
+import { useToastStore } from './toast'
+import { credits } from '../utils/format'
 import type { City, Commodity, Dashboard } from '../types'
 
 /**
@@ -45,6 +47,15 @@ export const useGameStore = defineStore('game', () => {
     try {
       const { data } = await api.get('/dashboard')
       dashboard.value = data
+      // Celebrate anything just unlocked (server returns each unlock once).
+      const unlocked = data.unlocked_achievements ?? []
+      if (unlocked.length) {
+        const toast = useToastStore()
+        for (const a of unlocked) {
+          const reward = a.reward_cash ? ` · +${credits(a.reward_cash)}` : ''
+          toast.success(`🏆 Achievement: ${a.name}${reward}`)
+        }
+      }
     } finally {
       loadingDashboard.value = false
     }

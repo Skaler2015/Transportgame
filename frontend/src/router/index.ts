@@ -23,6 +23,7 @@ const routes = [
       { path: 'map', name: 'map', component: () => import('../views/MapView.vue') },
       { path: 'market', name: 'market', component: () => import('../views/MarketView.vue') },
       { path: 'research', name: 'research', component: () => import('../views/ResearchView.vue') },
+      { path: 'achievements', name: 'achievements', component: () => import('../views/AchievementsView.vue') },
       { path: 'leaderboard', name: 'leaderboard', component: () => import('../views/LeaderboardView.vue') },
       { path: 'settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
     ],

@@ -202,6 +202,30 @@ export interface LedgerEntry {
   occurred_at: string
 }
 
+export interface AchievementUnlock {
+  key: string
+  name: string
+  icon: string
+  reward_cash: number
+  reward_xp: number
+}
+
+export interface Achievement {
+  key: string
+  name: string
+  description: string
+  icon: string
+  category: string
+  metric: string
+  threshold: number
+  progress: number
+  progress_pct: number
+  reward_cash: number
+  reward_xp: number
+  unlocked: boolean
+  unlocked_at: string | null
+}
+
 export interface Dashboard {
   company: Company
   active_shipments: Shipment[]
@@ -211,4 +235,5 @@ export interface Dashboard {
   open_contracts: number
   my_open_contracts: number
   world_news: WorldEvent[]
+  unlocked_achievements?: AchievementUnlock[]
 }

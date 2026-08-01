@@ -13,6 +13,7 @@ use App\Models\LedgerEntry;
 use App\Models\Shipment;
 use App\Models\Vehicle;
 use App\Models\WorldEvent;
+use App\Services\AchievementService;
 use App\Services\ShipmentService;
 use Illuminate\Http\Request;
 
@@ -20,7 +21,10 @@ class CompanyController extends Controller
 {
     use ResolvesCompany;
 
-    public function __construct(private readonly ShipmentService $shipments) {}
+    public function __construct(
+        private readonly ShipmentService $shipments,
+        private readonly AchievementService $achievements,
+    ) {}
 
     public function show(Request $request)
     {
@@ -38,6 +42,10 @@ class CompanyController extends Controller
         // dashboard, so completed runs bank their payout on the next page load
         // rather than waiting on the world cron.
         $this->shipments->resolveDueFor($company);
+
+        // Unlock any achievements earned since the last dashboard poll and
+        // surface them so the client can celebrate the moment.
+        $newlyUnlocked = $this->achievements->check($company);
 
         $activeShipments = Shipment::where('company_id', $company->id)
             ->where('status', Shipment::STATUS_EN_ROUTE)
@@ -82,6 +90,10 @@ class CompanyController extends Controller
             'world_news' => WorldEventResource::collection(
                 WorldEvent::active()->orderByDesc('starts_at')->limit(6)->get()
             ),
+            'unlocked_achievements' => collect($newlyUnlocked)->map(fn ($a) => [
+                'key' => $a['key'], 'name' => $a['name'], 'icon' => $a['icon'],
+                'reward_cash' => (int) ($a['cash'] ?? 0), 'reward_xp' => (int) ($a['xp'] ?? 0),
+            ])->values(),
         ]);
     }
 

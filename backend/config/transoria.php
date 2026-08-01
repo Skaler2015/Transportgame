@@ -216,6 +216,54 @@ return [
         'fee_pct' => 0.02,            // 2% market fee on sale, taken from seller
     ],
 
+    // Achievements. Each is unlocked when a company metric crosses a threshold;
+    // metric ∈ deliveries, revenue(cents), cash(cents), level, reputation,
+    // fleet, drivers, trailers, warehouses. Reward = cash(cents) + xp. Add more
+    // freely — the system is fully config-driven.
+    'achievements' => [
+        // Deliveries
+        ['key' => 'deliver_1', 'name' => 'First Haul', 'desc' => 'Complete your first delivery.', 'icon' => '📦', 'category' => 'Deliveries', 'metric' => 'deliveries', 'threshold' => 1, 'cash' => 2_000_00, 'xp' => 50],
+        ['key' => 'deliver_10', 'name' => 'Getting Rolling', 'desc' => 'Complete 10 deliveries.', 'icon' => '🚚', 'category' => 'Deliveries', 'metric' => 'deliveries', 'threshold' => 10, 'cash' => 8_000_00, 'xp' => 120],
+        ['key' => 'deliver_50', 'name' => 'Road Warrior', 'desc' => 'Complete 50 deliveries.', 'icon' => '🛣️', 'category' => 'Deliveries', 'metric' => 'deliveries', 'threshold' => 50, 'cash' => 30_000_00, 'xp' => 400],
+        ['key' => 'deliver_250', 'name' => 'Freight Baron', 'desc' => 'Complete 250 deliveries.', 'icon' => '👑', 'category' => 'Deliveries', 'metric' => 'deliveries', 'threshold' => 250, 'cash' => 120_000_00, 'xp' => 1500],
+        ['key' => 'deliver_1000', 'name' => 'Logistics King', 'desc' => 'Complete 1,000 deliveries.', 'icon' => '🏆', 'category' => 'Deliveries', 'metric' => 'deliveries', 'threshold' => 1000, 'cash' => 600_000_00, 'xp' => 6000],
+
+        // Revenue (lifetime, in cents)
+        ['key' => 'rev_500k', 'name' => 'Half a Million', 'desc' => 'Earn ₹500,000 in lifetime revenue.', 'icon' => '💰', 'category' => 'Wealth', 'metric' => 'revenue', 'threshold' => 500_000_00, 'cash' => 10_000_00, 'xp' => 200],
+        ['key' => 'rev_5m', 'name' => 'Big Earner', 'desc' => 'Earn ₹5,000,000 in lifetime revenue.', 'icon' => '💵', 'category' => 'Wealth', 'metric' => 'revenue', 'threshold' => 5_000_000_00, 'cash' => 60_000_00, 'xp' => 800],
+        ['key' => 'rev_50m', 'name' => 'Tycoon', 'desc' => 'Earn ₹50,000,000 in lifetime revenue.', 'icon' => '🏦', 'category' => 'Wealth', 'metric' => 'revenue', 'threshold' => 50_000_000_00, 'cash' => 400_000_00, 'xp' => 4000],
+        ['key' => 'rev_500m', 'name' => 'Magnate', 'desc' => 'Earn ₹500,000,000 in lifetime revenue.', 'icon' => '💎', 'category' => 'Wealth', 'metric' => 'revenue', 'threshold' => 500_000_000_00, 'cash' => 3_000_000_00, 'xp' => 25000],
+
+        // Cash on hand
+        ['key' => 'millionaire', 'name' => 'Millionaire', 'desc' => 'Hold ₹1,000,000 in cash.', 'icon' => '🤑', 'category' => 'Wealth', 'metric' => 'cash', 'threshold' => 1_000_000_00, 'cash' => 0, 'xp' => 300],
+        ['key' => 'multimillionaire', 'name' => 'Multi-Millionaire', 'desc' => 'Hold ₹10,000,000 in cash.', 'icon' => '💸', 'category' => 'Wealth', 'metric' => 'cash', 'threshold' => 10_000_000_00, 'cash' => 0, 'xp' => 1500],
+
+        // Fleet
+        ['key' => 'fleet_3', 'name' => 'Small Fleet', 'desc' => 'Own 3 vehicles.', 'icon' => '🚐', 'category' => 'Fleet', 'metric' => 'fleet', 'threshold' => 3, 'cash' => 5_000_00, 'xp' => 100],
+        ['key' => 'fleet_10', 'name' => 'Fleet Master', 'desc' => 'Own 10 vehicles.', 'icon' => '🚛', 'category' => 'Fleet', 'metric' => 'fleet', 'threshold' => 10, 'cash' => 40_000_00, 'xp' => 500],
+        ['key' => 'fleet_25', 'name' => 'Mega Fleet', 'desc' => 'Own 25 vehicles.', 'icon' => '🚢', 'category' => 'Fleet', 'metric' => 'fleet', 'threshold' => 25, 'cash' => 150_000_00, 'xp' => 2000],
+        ['key' => 'fleet_50', 'name' => 'Fleet Emperor', 'desc' => 'Own 50 vehicles.', 'icon' => '✈️', 'category' => 'Fleet', 'metric' => 'fleet', 'threshold' => 50, 'cash' => 500_000_00, 'xp' => 5000],
+
+        // Trailers / Drivers / Warehouses
+        ['key' => 'trailers_3', 'name' => 'Trailer Park', 'desc' => 'Own 3 trailers.', 'icon' => '🚋', 'category' => 'Equipment', 'metric' => 'trailers', 'threshold' => 3, 'cash' => 6_000_00, 'xp' => 120],
+        ['key' => 'trailers_10', 'name' => 'Trailer Tycoon', 'desc' => 'Own 10 trailers.', 'icon' => '🧲', 'category' => 'Equipment', 'metric' => 'trailers', 'threshold' => 10, 'cash' => 40_000_00, 'xp' => 600],
+        ['key' => 'drivers_5', 'name' => 'Team Builder', 'desc' => 'Employ 5 drivers.', 'icon' => '🧑‍✈️', 'category' => 'Crew', 'metric' => 'drivers', 'threshold' => 5, 'cash' => 10_000_00, 'xp' => 200],
+        ['key' => 'drivers_20', 'name' => 'HR Boss', 'desc' => 'Employ 20 drivers.', 'icon' => '👥', 'category' => 'Crew', 'metric' => 'drivers', 'threshold' => 20, 'cash' => 80_000_00, 'xp' => 1000],
+        ['key' => 'warehouse_1', 'name' => 'Store Keeper', 'desc' => 'Build your first warehouse.', 'icon' => '🏬', 'category' => 'Trade', 'metric' => 'warehouses', 'threshold' => 1, 'cash' => 8_000_00, 'xp' => 150],
+        ['key' => 'warehouse_5', 'name' => 'Warehouse Mogul', 'desc' => 'Own 5 warehouses.', 'icon' => '🏭', 'category' => 'Trade', 'metric' => 'warehouses', 'threshold' => 5, 'cash' => 120_000_00, 'xp' => 1500],
+
+        // Level
+        ['key' => 'level_5', 'name' => 'Rising Star', 'desc' => 'Reach level 5.', 'icon' => '⭐', 'category' => 'Progression', 'metric' => 'level', 'threshold' => 5, 'cash' => 15_000_00, 'xp' => 0],
+        ['key' => 'level_10', 'name' => 'Seasoned CEO', 'desc' => 'Reach level 10.', 'icon' => '🌟', 'category' => 'Progression', 'metric' => 'level', 'threshold' => 10, 'cash' => 50_000_00, 'xp' => 0],
+        ['key' => 'level_20', 'name' => 'Industry Veteran', 'desc' => 'Reach level 20.', 'icon' => '💫', 'category' => 'Progression', 'metric' => 'level', 'threshold' => 20, 'cash' => 200_000_00, 'xp' => 0],
+        ['key' => 'level_30', 'name' => 'Living Legend', 'desc' => 'Reach level 30.', 'icon' => '🔥', 'category' => 'Progression', 'metric' => 'level', 'threshold' => 30, 'cash' => 750_000_00, 'xp' => 0],
+
+        // Reputation
+        ['key' => 'rep_700', 'name' => 'Trusted Carrier', 'desc' => 'Reach 700 reputation.', 'icon' => '🤝', 'category' => 'Reputation', 'metric' => 'reputation', 'threshold' => 700, 'cash' => 20_000_00, 'xp' => 300],
+        ['key' => 'rep_900', 'name' => 'Elite Carrier', 'desc' => 'Reach 900 reputation.', 'icon' => '🎖️', 'category' => 'Reputation', 'metric' => 'reputation', 'threshold' => 900, 'cash' => 80_000_00, 'xp' => 800],
+        ['key' => 'rep_1000', 'name' => 'Flawless', 'desc' => 'Reach maximum reputation.', 'icon' => '💠', 'category' => 'Reputation', 'metric' => 'reputation', 'threshold' => 1000, 'cash' => 250_000_00, 'xp' => 2500],
+    ],
+
     // World events the tick engine can roll. Weight = relative likelihood.
     'events' => [
         'fuel_crisis' => [

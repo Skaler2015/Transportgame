@@ -82,6 +82,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/shipments', [ShipmentController::class, 'index']);
     Route::post('/shipments/dispatch', [ShipmentController::class, 'dispatch']);
 
+    Route::get('/achievements', [AchievementController::class, 'index']);
+
     Route::get('/research', [ResearchController::class, 'index']);
     Route::post('/research/{node}/unlock', [ResearchController::class, 'unlock']);
 

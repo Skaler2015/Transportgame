@@ -312,6 +312,31 @@ class GameplayLoopTest extends TestCase
             ->assertJsonPath('data.status', 'idle');
     }
 
+    public function test_achievements_unlock_and_grant_rewards(): void
+    {
+        $user = User::factory()->create();
+        $svc = app(CompanyService::class);
+        $company = $svc->found($user, 'Trophy Co');
+        $achievements = app(\App\Services\AchievementService::class);
+
+        // Nothing earned at the very start.
+        $this->assertSame(0, \App\Models\CompanyAchievement::where('company_id', $company->id)->count());
+
+        // Simulate a first delivery + some revenue, then evaluate.
+        $company->update(['shipments_completed' => 1, 'lifetime_revenue' => 600_000_00, 'cash' => 300_000_00]);
+        $cashBefore = $company->fresh()->cash;
+
+        $new = $achievements->check($company->fresh());
+
+        $keys = collect($new)->pluck('key');
+        $this->assertTrue($keys->contains('deliver_1'), 'First delivery achievement should unlock.');
+        $this->assertTrue($keys->contains('rev_500k'), 'Revenue achievement should unlock.');
+        // Reward cash was credited via the ledger.
+        $this->assertGreaterThan($cashBefore, $company->fresh()->cash);
+        // Re-running is idempotent — no duplicates.
+        $this->assertCount(0, $achievements->check($company->fresh()));
+    }
+
     public function test_reset_wipes_progress_and_reissues_the_starter_loadout(): void
     {
         $user = User::factory()->create();

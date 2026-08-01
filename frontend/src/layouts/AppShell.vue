@@ -33,6 +33,7 @@ const nav = [
   { to: '/map', label: 'Live Map', icon: '◎' },
   { to: '/market', label: 'Markets', icon: '≣' },
   { to: '/research', label: 'R&D Tree', icon: '✦' },
+  { to: '/achievements', label: 'Achievements', icon: '🏆' },
   { to: '/leaderboard', label: 'Leaderboard', icon: '♛' },
   { to: '/settings', label: 'Settings', icon: '⚙' },
 ]
