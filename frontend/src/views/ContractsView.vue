@@ -366,11 +366,16 @@ function readyToGo(c: Contract): boolean {
   const v = bestVehicle(c)
   return !!v && dispatchableNow(v, c) && !!bestDriver(c)
 }
-// One tap on the row: auto-pick the best rig and dispatch immediately.
+// One tap on the row: refresh the fleet (so availability is current, not the
+// 15s-stale poll), auto-pick the best rig from fresh data, then dispatch. If a
+// truck/driver just became busy, open the drawer instead of failing.
 async function quickDispatch(c: Contract) {
+  dispatching.value = c.id
+  await loadFleet().catch(() => {})
+  selection.value[c.id] = { vehicle_id: null, trailer_id: null, driver_id: null }
   autoSelect(c)
   if (!canDispatch(c)) {
-    // Missing something — open the row so the player can complete the choice.
+    dispatching.value = null
     expandedContract.value = c.id
     return
   }
@@ -451,6 +456,11 @@ async function dispatchNow(c: Contract) {
     game.refreshDashboard().catch(() => {})
   } catch (e) {
     toast.error(apiError(e))
+    // The one-tap GO relied on possibly-stale availability — refresh the fleet
+    // so a now-busy truck/driver stops showing GO, and open the drawer so the
+    // player can pick another rig.
+    await loadFleet().catch(() => {})
+    expandedContract.value = c.id
   } finally {
     dispatching.value = null
   }
