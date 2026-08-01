@@ -57,12 +57,12 @@ function metricText(v: number, invert = false): string {
 }
 
 // ---- Sortable table --------------------------------------------------------
-type SortKey = 'name' | 'status' | 'skill' | 'health' | 'morale' | 'fatigue' | 'rain' | 'eco'
+type SortKey = 'name' | 'rank' | 'age' | 'runs' | 'status' | 'skill' | 'health' | 'morale' | 'fatigue' | 'rain' | 'eco'
 const sortField = ref<SortKey>('skill')
 const sortDir = ref<'asc' | 'desc'>('desc')
 function setSort(k: SortKey) {
   if (sortField.value === k) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
-  else { sortField.value = k; sortDir.value = ['name', 'status'].includes(k) ? 'asc' : 'desc' }
+  else { sortField.value = k; sortDir.value = ['name', 'status', 'rank'].includes(k) ? 'asc' : 'desc' }
 }
 function arrow(k: SortKey): string {
   return sortField.value !== k ? '' : (sortDir.value === 'asc' ? ' ▲' : ' ▼')
@@ -70,6 +70,9 @@ function arrow(k: SortKey): string {
 function sortVal(d: Driver, k: SortKey): number | string {
   switch (k) {
     case 'name': return (d.name || '').toLowerCase()
+    case 'rank': return (d.rank || '').toLowerCase()
+    case 'age': return d.age ?? 0
+    case 'runs': return d.shipments_done ?? 0
     case 'status': return d.status
     case 'skill': return d.skill ?? 0
     case 'health': return d.health ?? 100
@@ -112,17 +115,20 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
     <!-- Desktop: sortable table (md and up) -->
     <div v-else class="hidden md:block glass !p-0 overflow-hidden">
       <div class="overflow-x-auto">
-      <table class="w-full text-sm min-w-[820px] border-collapse">
+      <table class="w-full text-sm min-w-[1000px] border-collapse">
         <thead class="text-[10px] uppercase tracking-wider text-slate-400 select-none bg-ink-900/80 backdrop-blur sticky top-0 z-10">
           <tr class="border-b border-white/10 [&>th]:cursor-pointer [&>th:hover]:text-brand-soft [&>th]:transition">
             <th class="text-left px-3 py-3 font-semibold" @click="setSort('name')">Driver{{ arrow('name') }}</th>
+            <th class="text-left px-2" @click="setSort('rank')">Rank{{ arrow('rank') }}</th>
+            <th class="text-right px-2" @click="setSort('age')">Age{{ arrow('age') }}</th>
+            <th class="text-right px-2" @click="setSort('runs')">Runs{{ arrow('runs') }}</th>
             <th class="text-left px-2" @click="setSort('status')">Status{{ arrow('status') }}</th>
             <th class="text-right px-2" @click="setSort('skill')">Skill{{ arrow('skill') }}</th>
             <th class="text-right px-2" @click="setSort('health')">Health{{ arrow('health') }}</th>
             <th class="text-right px-2" @click="setSort('morale')">Morale{{ arrow('morale') }}</th>
             <th class="text-right px-2" @click="setSort('fatigue')">Fatigue{{ arrow('fatigue') }}</th>
-            <th class="text-right px-2" @click="setSort('rain')">🌧{{ arrow('rain') }}</th>
-            <th class="text-right px-2" @click="setSort('eco')">⛽{{ arrow('eco') }}</th>
+            <th class="text-right px-2" @click="setSort('rain')" title="Wet-weather driving skill">Rain{{ arrow('rain') }}</th>
+            <th class="text-right px-2" @click="setSort('eco')" title="Fuel-economy skill">Eco{{ arrow('eco') }}</th>
             <th class="text-center px-2 !cursor-default">Licence</th>
             <th class="text-right px-3 !cursor-default"></th>
           </tr>
@@ -134,12 +140,12 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
               <td class="px-3 py-2.5">
                 <div class="flex items-center gap-2.5 min-w-0">
                   <div class="h-8 w-8 rounded-full bg-gradient-to-br from-ink-600 to-ink-700 flex items-center justify-center font-bold text-xs shrink-0">{{ d.name.charAt(0) }}</div>
-                  <div class="min-w-0">
-                    <p class="font-semibold truncate">{{ d.name }}</p>
-                    <p class="text-[10px] text-slate-500 truncate"><span class="text-brand-soft">{{ d.rank || 'Rookie' }}</span> · age {{ d.age ?? '—' }} · {{ num(d.shipments_done) }} runs</p>
-                  </div>
+                  <p class="font-semibold truncate">{{ d.name }}</p>
                 </div>
               </td>
+              <td class="px-2 text-brand-soft">{{ d.rank || 'Rookie' }}</td>
+              <td class="px-2 text-right font-mono text-slate-300">{{ d.age ?? '—' }}</td>
+              <td class="px-2 text-right font-mono text-slate-300">{{ num(d.shipments_done) }}</td>
               <td class="px-2"><span class="chip capitalize text-[10px]" :class="statusChip[d.status]">{{ d.status }}</span></td>
               <td class="px-2 text-right font-mono" :class="metricText(d.skill)">{{ d.skill }}</td>
               <td class="px-2 text-right font-mono" :class="metricText(d.health ?? 100)">{{ d.health ?? 100 }}</td>
@@ -148,8 +154,8 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
               <td class="px-2 text-right font-mono text-slate-300">{{ d.rain_skill ?? 0 }}</td>
               <td class="px-2 text-right font-mono text-slate-300">{{ d.eco_skill ?? 0 }}</td>
               <td class="px-2 text-center whitespace-nowrap">
-                <span :title="d.is_licensed ? 'Licensed' : 'Licence expired'">{{ d.is_licensed ? '📋' : '⚠️' }}</span>
-                <span v-if="d.hazmat_licence" title="Hazmat">☣</span>
+                <span :class="d.is_licensed ? 'text-gain' : 'text-loss'">{{ d.is_licensed ? '📋 OK' : '⚠ exp' }}</span>
+                <span v-if="d.hazmat_licence" title="Hazmat" class="text-loss ml-0.5">☣</span>
               </td>
               <td class="px-3 py-2 text-right whitespace-nowrap">
                 <button class="btn-ghost !py-1 !px-2 text-[11px]" @click.stop="toggleExpand(d.id)">{{ expandedId === d.id ? '×' : 'Manage' }}</button>
@@ -157,7 +163,7 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
             </tr>
             <!-- Actions drawer -->
             <tr v-if="expandedId === d.id" class="bg-ink-900/50 border-b border-white/5">
-              <td colspan="10" class="px-3 py-3">
+              <td colspan="13" class="px-3 py-3">
                 <div class="flex flex-wrap items-center gap-2">
                   <button class="btn-ghost !py-1.5 !px-3 text-[11px]" :disabled="working === d.id" @click="action(d, 'train')" title="+ skill & specialties">🎓 Train · {{ credits(costs.train) }}</button>
                   <button class="btn-ghost !py-1.5 !px-3 text-[11px]" :class="!d.is_licensed && 'ring-1 ring-loss/50'" :disabled="working === d.id" @click="action(d, 'licence')" :title="`Renew for ${costs.licence_days} days`">📋 Licence · {{ credits(costs.licence) }}</button>
