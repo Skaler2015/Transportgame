@@ -191,6 +191,11 @@ const maxTimeLeft = computed(() => {
   const last = onTheRoad.value[onTheRoad.value.length - 1]
   return last ? etaLeft(last) : '—'
 })
+// Soonest arrival (onTheRoad is sorted soonest-first → the first element).
+const minTimeLeft = computed(() => {
+  const first = onTheRoad.value[0]
+  return first ? etaLeft(first) : '—'
+})
 
 // Contract table: expand-to-dispatch drawer + client-side sort on any column.
 const expandedContract = ref<number | null>(null)
@@ -509,6 +514,10 @@ onUnmounted(() => clearInterval(poll))
         <div class="flex items-center justify-between">
           <span class="text-slate-400">Value</span>
           <span class="font-mono text-gold font-semibold">{{ credits(roadTotals.value) }}</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-400">Shortest</span>
+          <span class="font-mono text-gain font-semibold">⏱ {{ minTimeLeft }}</span>
         </div>
         <div class="flex items-center justify-between">
           <span class="text-slate-400">Longest</span>
