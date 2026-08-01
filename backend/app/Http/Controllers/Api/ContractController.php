@@ -49,8 +49,9 @@ class ContractController extends Controller
         // up open contracts when a player looks at the board (rate-limited).
         $this->ensureMarketFresh();
 
-        // Guarantee a free truck always has haulable jobs starting from where it
-        // is parked (rate-limited per company).
+        // Keep every city connected with work for every vehicle class, and make
+        // sure a free truck always has haulable jobs from where it's parked.
+        $this->ensureCityCoverage($company->country);
         $this->ensureLocalWork($company);
 
         $query = Contract::onMarket()->with(['commodity', 'origin', 'destination'])
@@ -136,6 +137,23 @@ class ContractController extends Controller
             $economy->replenishContracts($events);
         } catch (\Throwable $e) {
             Log::error('Market replenish failed: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Ensure every city in the country has open work across all load sizes, so
+     * any vehicle anywhere always has a contract. Rate-limited per country.
+     */
+    private function ensureCityCoverage(string $country): void
+    {
+        if (! Cache::add("city-coverage:{$country}", 1, now()->addSeconds(90))) {
+            return;
+        }
+
+        try {
+            app(EconomyService::class)->ensureCityCoverage($country);
+        } catch (\Throwable $e) {
+            Log::error('City coverage top-up failed: '.$e->getMessage());
         }
     }
 

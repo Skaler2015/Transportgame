@@ -275,7 +275,7 @@ class EconomyService
      * Create one contract hauling $commodity from $origin to the most
      * profitable reachable consumer city. Returns the Contract or null.
      */
-    protected function mintContract(City $origin, Commodity $commodity, Collection $cities, array $priceLookup, Collection $events, ?float $maxTonnes = null): ?Contract
+    protected function mintContract(City $origin, Commodity $commodity, Collection $cities, array $priceLookup, Collection $events, ?float $maxTonnes = null, ?array $forceBand = null): ?Contract
     {
         $cfg = config('transoria.contracts');
         $cfgShip = config('transoria.shipment');
@@ -318,7 +318,7 @@ class EconomyService
             [1.5, 3.4], [1.5, 3.4], [1.5, 3.4],
             [4.0, 9.0], [10.0, 20.0], [20.0, 26.0],
         ];
-        [$lo, $hi] = $bands[array_rand($bands)];
+        [$lo, $hi] = $forceBand ?? $bands[array_rand($bands)];
         $targetTonnes = $lo + (mt_rand() / mt_getrandmax()) * ($hi - $lo);
         // Cap the load so a specific truck can physically haul it (used when
         // guaranteeing local work for an idle vehicle of a known capacity).
@@ -417,6 +417,60 @@ class EconomyService
         return Contract::where('status', Contract::STATUS_OPEN)
             ->where('expires_at', '<=', now())
             ->update(['status' => Contract::STATUS_EXPIRED]);
+    }
+
+    /**
+     * Keep EVERY city connected with work for EVERY class of vehicle: guarantee
+     * each city in the country has open jobs across a spread of load sizes —
+     * small (courier/van), medium (rigid) and large (heavy artic) — so any truck
+     * at any location always has a contract it can take. Rate-limited by callers.
+     * Returns the number of contracts minted.
+     */
+    public function ensureCityCoverage(string $country, int $perTier = 2): int
+    {
+        // Load tiers in tonnes: small / medium / large.
+        $tiers = [[0.4, 1.4], [1.8, 7.0], [9.0, 24.0]];
+
+        $cities = City::where('country', $country)->get();
+        if ($cities->count() < 2) {
+            return 0;
+        }
+
+        $priceLookup = $this->buildPriceLookup();
+        $events = WorldEvent::active()->get();
+        $commodities = Commodity::all();
+        $created = 0;
+
+        foreach ($cities as $origin) {
+            $open = Contract::onMarket()
+                ->where('origin_city_id', $origin->id)
+                ->with('commodity')->get();
+
+            foreach ($tiers as [$lo, $hi]) {
+                $have = $open->filter(function (Contract $c) use ($lo, $hi) {
+                    $t = $c->commodity->weight_per_unit * $c->units;
+
+                    return $t >= $lo - 0.001 && $t <= $hi + 0.001;
+                })->count();
+
+                // Only commodities light enough that a single unit fits the tier,
+                // so a "small" job is actually small (heavy-per-unit goods can't
+                // make a courier-sized load).
+                $fitting = $commodities->filter(fn (Commodity $cm) => $cm->weight_per_unit <= $hi + 0.001);
+                if ($fitting->isEmpty()) {
+                    continue;
+                }
+
+                for ($i = $have; $i < $perTier; $i++) {
+                    $commodity = $fitting->random();
+                    if ($this->mintContract($origin, $commodity, $cities, $priceLookup, $events, $hi, [$lo, $hi])) {
+                        $created++;
+                    }
+                }
+            }
+        }
+
+        return $created;
     }
 
     /** Latest price per [commodity_id][city_id] from the market history. */

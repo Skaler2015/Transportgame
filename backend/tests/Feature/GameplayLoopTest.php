@@ -328,6 +328,25 @@ class GameplayLoopTest extends TestCase
         $this->assertGreaterThan(0, $shipment->fresh()->service_cost);
     }
 
+    public function test_every_city_offers_work_for_small_and_large_vehicles(): void
+    {
+        // All cities stay connected with jobs across load sizes, so any vehicle
+        // at any location always has a contract it can take.
+        app(\App\Services\EconomyService::class)->ensureCityCoverage('IN');
+
+        foreach (\App\Models\City::where('country', 'IN')->get() as $city) {
+            $loads = Contract::onMarket()
+                ->where('origin_city_id', $city->id)
+                ->with('commodity')->get()
+                ->map(fn (Contract $c) => $c->commodity->weight_per_unit * $c->units);
+
+            $this->assertTrue($loads->contains(fn ($t) => $t <= 1.5),
+                "City {$city->name} has no small-vehicle load.");
+            $this->assertTrue($loads->contains(fn ($t) => $t >= 8),
+                "City {$city->name} has no large-vehicle load.");
+        }
+    }
+
     public function test_market_guarantees_local_work_where_a_free_truck_is_parked(): void
     {
         // A free truck must always have jobs starting from its own city.
