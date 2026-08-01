@@ -108,6 +108,19 @@ class CompanyController extends Controller
         ]);
     }
 
+    /** Wipe the company's progress and start fresh (keeps the login). */
+    public function reset(Request $request)
+    {
+        $company = $this->company($request);
+
+        $fresh = app(\App\Services\CompanyService::class)->resetCompany($company);
+
+        return response()->json([
+            'message' => 'Fresh start! Your company has been reset to a single truck.',
+            'company' => new CompanyResource($fresh->loadCount('vehicles', 'drivers')->load('headquarters')),
+        ]);
+    }
+
     /** Company financial ledger (paginated). */
     public function ledger(Request $request)
     {

@@ -4,14 +4,22 @@ namespace App\Services;
 
 use App\Models\City;
 use App\Models\Company;
+use App\Models\CompanyResearch;
 use App\Models\Contract;
 use App\Models\Driver;
 use App\Models\LedgerEntry;
+use App\Models\Loan;
+use App\Models\Mission;
+use App\Models\Shipment;
+use App\Models\TradeListing;
 use App\Models\Trailer;
 use App\Models\TrailerModel;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehicleModel;
+use App\Models\Warehouse;
+use App\Models\WarehouseInventory;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -32,28 +40,101 @@ class CompanyService
     /** Found a new company for a user with the starter loadout in a country. */
     public function found(User $user, string $companyName, ?string $country = null): Company
     {
-        $starter = config('transoria.starter');
-        $country = array_key_exists($country, config('transoria.countries'))
-            ? $country : config('transoria.default_country');
+        $country = $this->normaliseCountry($country);
+        $hq = $this->pickHq($country);
 
-        $hq = $this->pickStarterCity($country)
-            ?? City::where('country', $country)->where('unlock_level', 1)->inRandomOrder()->first()
-            ?? City::where('country', $country)->first();
-
-        $company = Company::create([
+        $company = Company::create(array_merge([
             'user_id' => $user->id,
             'name' => $companyName,
-            'country' => $country,
             'slug' => $this->uniqueSlug($companyName),
+            'logo_color' => '#'.substr(md5($companyName), 0, 6),
+        ], $this->starterColumns($country, $hq)));
+
+        $this->grantStarterAssets($company, $hq);
+
+        return $company->fresh(['vehicles', 'drivers', 'headquarters']);
+    }
+
+    /**
+     * Wipe a company's progress and start it over from the starter loadout,
+     * keeping the same login, name and country. Everything the company owned —
+     * fleet, trailers, crew, contracts, shipments, warehouses, loans, research,
+     * missions, market listings and the entire ledger — is cleared, and a fresh
+     * starter fleet is issued.
+     */
+    public function resetCompany(Company $company): Company
+    {
+        return DB::transaction(function () use ($company) {
+            $country = $this->normaliseCountry($company->country);
+
+            $this->wipeCompanyState($company);
+
+            $hq = $this->pickHq($country);
+            $company->update($this->starterColumns($country, $hq));
+
+            $this->grantStarterAssets($company->fresh(), $hq);
+
+            return $company->fresh(['vehicles', 'drivers', 'headquarters']);
+        });
+    }
+
+    /** Delete every game record tied to a company (safe FK order). */
+    private function wipeCompanyState(Company $company): void
+    {
+        $id = $company->id;
+
+        // Shipments first — they restrict-reference vehicles/drivers/contracts.
+        Shipment::where('company_id', $id)->delete();
+        Contract::where('company_id', $id)->delete();
+        Trailer::where('company_id', $id)->delete();
+        Vehicle::where('company_id', $id)->delete();
+        Driver::where('company_id', $id)->delete();
+
+        $warehouseIds = Warehouse::where('company_id', $id)->pluck('id');
+        if ($warehouseIds->isNotEmpty()) {
+            WarehouseInventory::whereIn('warehouse_id', $warehouseIds)->delete();
+            Warehouse::whereIn('id', $warehouseIds)->delete();
+        }
+
+        TradeListing::where('seller_company_id', $id)->delete();
+        Loan::where('company_id', $id)->delete();
+        CompanyResearch::where('company_id', $id)->delete();
+        Mission::where('company_id', $id)->delete();
+        LedgerEntry::where('company_id', $id)->delete();
+    }
+
+    /** Starter/reset values for a company's own columns. */
+    private function starterColumns(string $country, ?City $hq): array
+    {
+        $starter = config('transoria.starter');
+
+        return [
+            'country' => $country,
             'headquarters_city_id' => $hq?->id,
             'cash' => $starter['cash'],
+            'debt' => 0,
             'reputation' => $starter['reputation'],
-            'logo_color' => '#'.substr(md5($companyName), 0, 6),
+            'level' => 1,
+            'xp' => 0,
+            'research_points' => 0,
+            'shipments_completed' => 0,
+            'shipments_failed' => 0,
+            'lifetime_revenue' => 0,
+            'lifetime_expenses' => 0,
+            'guild_id' => null,
+            'guild_role' => null,
+            'guild_contribution' => 0,
             'last_tick_at' => now(),
-        ]);
+        ];
+    }
 
-        // Free first truck.
-        $model = VehicleModel::where('key', $starter['vehicle_model'])->first() ?? VehicleModel::orderBy('price')->first();
+    /** Issue the physical starter loadout: a truck, a trailer, crew, missions. */
+    private function grantStarterAssets(Company $company, ?City $hq): void
+    {
+        $starter = config('transoria.starter');
+
+        $model = VehicleModel::where('key', $starter['vehicle_model'])->first()
+            ?? VehicleModel::orderBy('price')->first();
         if ($model && $hq) {
             Vehicle::create([
                 'company_id' => $company->id,
@@ -66,18 +147,29 @@ class CompanyService
             ]);
         }
 
-        // A starter trailer so the company can graduate to bigger tractors.
         $this->grantStarterTrailer($company, $hq);
 
-        // Starter driver(s).
         for ($i = 0; $i < ($starter['drivers'] ?? 1); $i++) {
             $this->generateDriver($company, skillFloor: 35);
         }
 
-        // Give the new player an opening slate of missions.
         $this->missions->ensure($company);
+    }
 
-        return $company->fresh(['vehicles', 'drivers', 'headquarters']);
+    /** A level-1 city in the country to base a fresh company at. */
+    private function pickHq(string $country): ?City
+    {
+        return $this->pickStarterCity($country)
+            ?? City::where('country', $country)->where('unlock_level', 1)->inRandomOrder()->first()
+            ?? City::where('country', $country)->first();
+    }
+
+    /** Coerce an arbitrary country code to a valid, playable one. */
+    private function normaliseCountry(?string $country): string
+    {
+        return array_key_exists((string) $country, config('transoria.countries'))
+            ? (string) $country
+            : config('transoria.default_country');
     }
 
     /**

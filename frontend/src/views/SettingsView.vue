@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { api, apiError } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import { useGameStore } from '../stores/game'
@@ -8,10 +9,37 @@ import { useToastStore } from '../stores/toast'
 const auth = useAuthStore()
 const game = useGameStore()
 const toast = useToastStore()
+const router = useRouter()
 
 const countries = ref<{ code: string; name: string }[]>([])
 const chosen = ref('')
 const busy = ref(false)
+
+// Danger zone: reset company.
+const showReset = ref(false)
+const resetConfirm = ref('')
+const resetting = ref(false)
+
+async function resetCompany() {
+  if (resetConfirm.value.trim().toUpperCase() !== 'RESET') {
+    return toast.error('Type RESET to confirm.')
+  }
+  resetting.value = true
+  try {
+    const { data } = await api.post('/company/reset')
+    toast.success(data.message || 'Company reset. Fresh start!')
+    await auth.fetchMe()
+    await game.reloadCities().catch(() => {})
+    await game.refreshDashboard().catch(() => {})
+    showReset.value = false
+    resetConfirm.value = ''
+    router.push('/dashboard')
+  } catch (e) {
+    toast.error(apiError(e))
+  } finally {
+    resetting.value = false
+  }
+}
 
 onMounted(async () => {
   try {
@@ -81,6 +109,39 @@ async function changeCountry() {
         <div><p class="stat-label">Country</p><p>{{ auth.company?.country_name || auth.company?.country }}</p></div>
         <div><p class="stat-label">HQ</p><p>{{ auth.company?.headquarters?.name || '—' }}</p></div>
         <div><p class="stat-label">Level</p><p>{{ auth.company?.level }}</p></div>
+      </div>
+    </div>
+
+    <!-- Danger zone: reset & start fresh -->
+    <div class="glass p-5 border border-loss/30">
+      <h2 class="font-semibold text-loss">Reset &amp; start fresh</h2>
+      <p class="text-sm text-slate-400 mt-1">
+        Wipe all progress and begin again from a single starter truck. This clears your
+        fleet, trailers, crew, contracts, deliveries, warehouses, loans, research, missions
+        and your entire ledger. Your login stays the same. <span class="text-loss">This cannot be undone.</span>
+      </p>
+
+      <div v-if="!showReset" class="mt-4">
+        <button class="btn-ghost !border-loss/40 !text-loss" @click="showReset = true">
+          Reset my company…
+        </button>
+      </div>
+
+      <div v-else class="mt-4 space-y-3">
+        <div>
+          <label class="stat-label">Type <span class="text-loss font-semibold">RESET</span> to confirm</label>
+          <input v-model="resetConfirm" class="input mt-1" placeholder="RESET" autocomplete="off" />
+        </div>
+        <div class="flex gap-2">
+          <button
+            class="btn-primary !bg-loss !text-white"
+            :disabled="resetting || resetConfirm.trim().toUpperCase() !== 'RESET'"
+            @click="resetCompany"
+          >
+            {{ resetting ? 'Resetting…' : 'Reset everything' }}
+          </button>
+          <button class="btn-ghost" :disabled="resetting" @click="showReset = false; resetConfirm = ''">Cancel</button>
+        </div>
       </div>
     </div>
   </div>

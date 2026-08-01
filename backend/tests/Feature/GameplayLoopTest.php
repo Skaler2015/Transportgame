@@ -264,4 +264,38 @@ class GameplayLoopTest extends TestCase
         $ship->dispatch($company->fresh(), $contract->fresh(), $vehicle->fresh(), $driver->fresh());
         $this->assertSame(Vehicle::STATUS_EN_ROUTE, $vehicle->fresh()->status);
     }
+
+    public function test_reset_wipes_progress_and_reissues_the_starter_loadout(): void
+    {
+        $user = User::factory()->create();
+        $svc = app(CompanyService::class);
+        $company = $svc->found($user, 'Reset Co');
+
+        // Add an extra vehicle and inflate the stats.
+        $extra = VehicleModel::where('key', 'kestrel-t20')->first();
+        Vehicle::create([
+            'company_id' => $company->id,
+            'vehicle_model_id' => $extra->id,
+            'city_id' => $company->headquarters_city_id,
+            'status' => Vehicle::STATUS_IDLE,
+            'condition' => 100,
+            'fuel' => $extra->fuel_capacity,
+        ]);
+        $company->update(['cash' => 42, 'level' => 7, 'xp' => 9999, 'reputation' => 5]);
+
+        $this->assertSame(2, Vehicle::where('company_id', $company->id)->count());
+
+        $fresh = $svc->resetCompany($company->fresh());
+
+        // Back to a single truck, one trailer, one driver, level 1, starter cash.
+        $this->assertSame(1, Vehicle::where('company_id', $fresh->id)->count());
+        $this->assertSame(1, Driver::where('company_id', $fresh->id)->count());
+        $this->assertSame(1, Trailer::where('company_id', $fresh->id)->count());
+        $this->assertSame(1, (int) $fresh->level);
+        $this->assertSame(0, (int) $fresh->xp);
+        $this->assertSame(config('transoria.starter.cash'), (int) $fresh->cash);
+        // Same user & company row — just a clean slate.
+        $this->assertSame($company->id, $fresh->id);
+        $this->assertSame($user->id, $fresh->user_id);
+    }
 }
