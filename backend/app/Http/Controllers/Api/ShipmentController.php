@@ -24,6 +24,11 @@ class ShipmentController extends Controller
     {
         $company = $this->company($request);
 
+        // Self-healing: settle any deliveries that have reached their ETA so the
+        // list never shows a truck stuck at "arriving…" even if the world cron
+        // hasn't ticked recently.
+        $this->shipments->resolveDueFor($company);
+
         $shipments = Shipment::where('company_id', $company->id)
             ->with(['contract.commodity', 'contract.origin', 'contract.destination', 'vehicle.model', 'driver'])
             ->orderByRaw("CASE status WHEN 'en_route' THEN 0 ELSE 1 END")

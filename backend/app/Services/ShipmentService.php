@@ -281,6 +281,25 @@ class ShipmentService
         });
     }
 
+    /**
+     * Settle any of a company's shipments whose ETA has passed. Called on
+     * dashboard/operations load so deliveries always complete when the player
+     * is active — even if the world-tick cron isn't running.
+     */
+    public function resolveDueFor(Company $company): int
+    {
+        $due = Shipment::where('company_id', $company->id)
+            ->where('status', Shipment::STATUS_EN_ROUTE)
+            ->where('eta_at', '<=', now())
+            ->get();
+
+        foreach ($due as $shipment) {
+            $this->resolve($shipment);
+        }
+
+        return $due->count();
+    }
+
     /** Advance a driver's rest between trips (called by the tick). */
     public function restDrivers(Company $company): void
     {

@@ -13,11 +13,14 @@ use App\Models\LedgerEntry;
 use App\Models\Shipment;
 use App\Models\Vehicle;
 use App\Models\WorldEvent;
+use App\Services\ShipmentService;
 use Illuminate\Http\Request;
 
 class CompanyController extends Controller
 {
     use ResolvesCompany;
+
+    public function __construct(private readonly ShipmentService $shipments) {}
 
     public function show(Request $request)
     {
@@ -30,6 +33,11 @@ class CompanyController extends Controller
     public function dashboard(Request $request)
     {
         $company = $this->company($request);
+
+        // Settle any deliveries that have reached their ETA before we read the
+        // dashboard, so completed runs bank their payout on the next page load
+        // rather than waiting on the world cron.
+        $this->shipments->resolveDueFor($company);
 
         $activeShipments = Shipment::where('company_id', $company->id)
             ->where('status', Shipment::STATUS_EN_ROUTE)
