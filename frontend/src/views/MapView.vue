@@ -17,10 +17,17 @@ const routeLayer = shallowRef<L.LayerGroup>()
 const shipments = ref<Shipment[]>([])
 const activeCount = ref(0)
 
-const REGION_COLOR: Record<string, string> = {
-  Coreland: '#38bdf8', Ironvale: '#f59e0b', Marisands: '#22d3ee',
-  Sunbelt: '#84cc16', Northreach: '#a78bfa',
+// Colour cities by role rather than region (regions are real states now).
+function cityColor(c: { has_port?: boolean; has_airport?: boolean }): string {
+  if (c.has_port) return '#22d3ee'
+  if (c.has_airport) return '#a78bfa'
+  return '#38bdf8'
 }
+const LEGEND = [
+  { label: 'Port', color: '#22d3ee' },
+  { label: 'Airport', color: '#a78bfa' },
+  { label: 'Inland', color: '#38bdf8' },
+]
 
 let animId: number | undefined
 let poll: number | undefined
@@ -37,7 +44,7 @@ function truckIcon(color: string) {
 function drawCities() {
   if (!map.value) return
   for (const c of game.cities) {
-    const color = REGION_COLOR[c.region] ?? '#94a3b8'
+    const color = cityColor(c)
     L.circleMarker([c.lat, c.lng], {
       radius: 5 + Math.min(6, c.population / 1_500_000),
       color,
@@ -139,11 +146,11 @@ onUnmounted(() => {
     <div class="flex items-end justify-between flex-wrap gap-3">
       <div>
         <h1 class="text-2xl font-bold">Live Map</h1>
-        <p class="text-slate-400 text-sm">The Transoria belt in real time — {{ activeCount }} of your trucks rolling.</p>
+        <p class="text-slate-400 text-sm">Your network in real time — {{ activeCount }} of your trucks rolling.</p>
       </div>
       <div class="flex flex-wrap gap-3 text-[11px]">
-        <span v-for="(color, region) in REGION_COLOR" :key="region" class="flex items-center gap-1.5">
-          <span class="h-2.5 w-2.5 rounded-full" :style="{ background: color }" />{{ region }}
+        <span v-for="l in LEGEND" :key="l.label" class="flex items-center gap-1.5">
+          <span class="h-2.5 w-2.5 rounded-full" :style="{ background: l.color }" />{{ l.label }}
         </span>
       </div>
     </div>

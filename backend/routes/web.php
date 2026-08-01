@@ -25,7 +25,12 @@ Route::get('/__setup', function () {
         $log[] = 'APP_KEY generated.';
     }
 
-    Artisan::call('migrate', ['--force' => true, '--seed' => true]);
+    // Apply schema changes, then sync world data (real cities per country +
+    // migrate existing companies onto them).
+    Artisan::call('migrate', ['--force' => true]);
+    $log[] = Artisan::output();
+
+    Artisan::call('transoria:worldsync');
     $log[] = Artisan::output();
 
     try {
