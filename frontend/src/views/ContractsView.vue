@@ -182,6 +182,15 @@ const roadTotals = computed(() =>
     { value: 0, profit: 0 },
   ),
 )
+// Current cash, and what it becomes once all on-road profit lands.
+const currentCash = computed(() => game.dashboard?.company?.cash ?? 0)
+const projectedCash = computed(() => currentCash.value + roadTotals.value.profit)
+// The longest wait among the running contracts (onTheRoad is soonest-first,
+// so the last one has the furthest ETA).
+const maxTimeLeft = computed(() => {
+  const last = onTheRoad.value[onTheRoad.value.length - 1]
+  return last ? etaLeft(last) : '—'
+})
 
 // Contract table: expand-to-dispatch drawer + client-side sort on any column.
 const expandedContract = ref<number | null>(null)
@@ -609,18 +618,9 @@ onUnmounted(() => clearInterval(poll))
        <h3 class="font-semibold text-sm mb-2">
          On the Road <span class="chip bg-brand/15 text-brand-soft ml-1">{{ onTheRoad.length }}</span>
        </h3>
-       <div v-if="onTheRoad.length" class="divide-y divide-white/5">
-         <div v-for="s in onTheRoad" :key="s.id" class="py-2">
-           <p class="text-xs font-medium">{{ s.contract?.origin?.name }} → {{ s.contract?.destination?.name }}</p>
-           <p class="font-mono text-[11px] mt-0.5" :class="etaLeft(s) === 'arriving…' ? 'text-gain' : 'text-brand-soft'">
-             ⏱ {{ etaLeft(s) }} left
-           </p>
-         </div>
-       </div>
-       <p v-else class="text-xs text-slate-500">Nothing en route right now.</p>
 
-       <!-- Totals for everything currently on the road -->
-       <div v-if="onTheRoad.length" class="border-t border-white/10 mt-1 pt-2 space-y-1">
+       <!-- Headline totals for everything currently on the road, up top. -->
+       <div v-if="onTheRoad.length" class="rounded-lg bg-white/5 p-2.5 space-y-1 mb-3">
          <div class="flex items-center justify-between text-xs">
            <span class="text-slate-400">Total value</span>
            <span class="font-mono text-gold font-semibold">{{ credits(roadTotals.value) }}</span>
@@ -631,7 +631,25 @@ onUnmounted(() => clearInterval(poll))
              {{ credits(roadTotals.profit) }}
            </span>
          </div>
+         <div class="flex items-center justify-between text-xs border-t border-white/10 pt-1">
+           <span class="text-slate-400">Cash after these land</span>
+           <span class="font-mono text-brand-soft font-semibold">{{ credits(projectedCash) }}</span>
+         </div>
+         <div class="flex items-center justify-between text-xs">
+           <span class="text-slate-400">Longest still running</span>
+           <span class="font-mono text-slate-200 font-semibold">⏱ {{ maxTimeLeft }}</span>
+         </div>
        </div>
+
+       <div v-if="onTheRoad.length" class="divide-y divide-white/5">
+         <div v-for="s in onTheRoad" :key="s.id" class="py-2">
+           <p class="text-xs font-medium">{{ s.contract?.origin?.name }} → {{ s.contract?.destination?.name }}</p>
+           <p class="font-mono text-[11px] mt-0.5" :class="etaLeft(s) === 'arriving…' ? 'text-gain' : 'text-brand-soft'">
+             ⏱ {{ etaLeft(s) }} left
+           </p>
+         </div>
+       </div>
+       <p v-else class="text-xs text-slate-500">Nothing en route right now.</p>
      </div>
 
      <!-- Free vehicles and where they're parked -->
