@@ -157,6 +157,14 @@ function needCost(v: Vehicle, need: string): number {
 // expands inline so a truck can be serviced right there (no scrolling away).
 const vehiclesNeedingFix = computed(() => freeVehicles.value.filter((v) => vehicleNeeds(v).length > 0))
 const serviceOpen = ref(false)
+// Total cost to fix one vehicle (sum of its needed services), and the grand
+// total to fix every free vehicle that needs service.
+function vehicleFixTotal(v: Vehicle): number {
+  return vehicleNeeds(v).reduce((sum, need) => sum + needCost(v, need), 0)
+}
+const allFixTotal = computed(() =>
+  vehiclesNeedingFix.value.reduce((sum, v) => sum + vehicleFixTotal(v), 0),
+)
 // Every trailer that isn't on the road — including worn-out ones (condition
 // too low to count as "available"), so the player can repair them from here.
 const freeTrailers = computed(() => trailers.value.filter((t) => t.status !== 'en_route'))
@@ -572,7 +580,10 @@ onUnmounted(() => clearInterval(poll))
     <div v-if="vehiclesNeedingFix.length" class="lg:hidden glass !p-3 ring-1 ring-gold/40">
       <button type="button" class="w-full flex items-center justify-between gap-2 text-left"
         @click="serviceOpen = !serviceOpen">
-        <span class="text-sm text-gold">🛠 {{ vehiclesNeedingFix.length }} vehicle(s) need service</span>
+        <span class="text-sm text-gold">
+          🛠 {{ vehiclesNeedingFix.length }} vehicle(s) need service
+          <span class="font-mono">· {{ credits(allFixTotal) }}</span>
+        </span>
         <span class="text-xs text-brand-soft shrink-0">{{ serviceOpen ? 'Hide ▲' : 'Fix here ▼' }}</span>
       </button>
       <div v-if="serviceOpen" class="mt-2 pt-2 border-t border-white/10 divide-y divide-white/5">
@@ -595,6 +606,9 @@ onUnmounted(() => clearInterval(poll))
               :disabled="servingVeh === v.id" @click="fixNeed(v, need)">
               {{ NEED_ICON[need] }} {{ servingVeh === v.id ? '…' : need }}<span v-if="needCost(v, need)" class="font-mono ml-1 normal-case">{{ credits(needCost(v, need)) }}</span>
             </button>
+            <span v-if="vehicleNeeds(v).length > 1" class="text-[10px] text-slate-400 ml-auto">
+              Total <span class="font-mono text-gold font-semibold">{{ credits(vehicleFixTotal(v)) }}</span>
+            </span>
           </div>
         </div>
       </div>
