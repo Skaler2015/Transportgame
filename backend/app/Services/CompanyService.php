@@ -449,6 +449,7 @@ class CompanyService
 
         return Driver::create([
             'company_id' => $company->id,
+            'crew_no' => Driver::where('company_id', $company->id)->max('crew_no') + 1,
             'name' => $name,
             'age' => random_int(24, 55),
             'avatar_seed' => Str::random(8),

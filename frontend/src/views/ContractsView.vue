@@ -498,7 +498,7 @@ onUnmounted(() => clearInterval(poll))
                     </select>
                     <select v-model="selection[c.id].driver_id" class="input !py-1.5 text-xs">
                       <option :value="null" disabled>Choose driver…</option>
-                      <option v-for="d in compatibleDrivers(c)" :key="d.id" :value="d.id">{{ d.name }} · skill {{ d.skill }}</option>
+                      <option v-for="d in compatibleDrivers(c)" :key="d.id" :value="d.id">{{ fleetTag(d.crew_no) }} {{ d.name }} · skill {{ d.skill }}</option>
                     </select>
                     <div class="flex items-center justify-between pt-1">
                       <button class="text-[11px] text-slate-400 hover:text-slate-200" :disabled="accepting === c.id" @click="accept(c)">{{ accepting === c.id ? '…' : 'Claim for later' }}</button>
@@ -553,7 +553,7 @@ onUnmounted(() => clearInterval(poll))
             </select>
             <select v-model="selection[c.id].driver_id" class="input !py-1.5 text-xs">
               <option :value="null" disabled>Choose driver…</option>
-              <option v-for="d in compatibleDrivers(c)" :key="d.id" :value="d.id">{{ d.name }} · skill {{ d.skill }}</option>
+              <option v-for="d in compatibleDrivers(c)" :key="d.id" :value="d.id">{{ fleetTag(d.crew_no) }} {{ d.name }} · skill {{ d.skill }}</option>
             </select>
             <div class="flex items-center justify-between pt-1">
               <button class="text-[11px] text-slate-400" :disabled="accepting === c.id" @click="accept(c)">{{ accepting === c.id ? '…' : 'Claim for later' }}</button>

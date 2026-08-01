@@ -11,6 +11,7 @@ class DriverResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'crew_no' => $this->crew_no !== null ? (int) $this->crew_no : null,
             'name' => $this->name,
             'age' => (int) $this->age,
             'avatar_seed' => $this->avatar_seed,

@@ -300,7 +300,7 @@ onUnmounted(() => clearInterval(poll))
               <select v-model="selection[c.id].driver_id" class="input !py-1.5 text-xs mt-0.5">
                 <option :value="null" disabled>Choose driver…</option>
                 <option v-for="d in compatibleDrivers(c)" :key="d.id" :value="d.id">
-                  {{ d.name }} · skill {{ d.skill }} · fatigue {{ d.fatigue }}
+                  {{ fleetTag(d.crew_no) }} {{ d.name }} · skill {{ d.skill }} · fatigue {{ d.fatigue }}
                 </option>
               </select>
             </div>

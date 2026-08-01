@@ -4,7 +4,7 @@ import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
 import type { Driver } from '../types'
-import { credits, num } from '../utils/format'
+import { credits, num, fleetTag } from '../utils/format'
 
 const game = useGameStore()
 const toast = useToastStore()
@@ -140,7 +140,7 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
               <td class="px-3 py-2.5">
                 <div class="flex items-center gap-2.5 min-w-0">
                   <div class="h-8 w-8 rounded-full bg-gradient-to-br from-ink-600 to-ink-700 flex items-center justify-center font-bold text-xs shrink-0">{{ d.name.charAt(0) }}</div>
-                  <p class="font-semibold truncate">{{ d.name }}</p>
+                  <p class="font-semibold truncate"><span class="font-mono text-brand-soft text-[11px] mr-1">{{ fleetTag(d.crew_no) }}</span>{{ d.name }}</p>
                 </div>
               </td>
               <td class="px-2 text-brand-soft">{{ d.rank || 'Rookie' }}</td>
@@ -186,7 +186,7 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
             <div class="flex items-center gap-2 min-w-0">
               <div class="h-8 w-8 rounded-full bg-gradient-to-br from-ink-600 to-ink-700 flex items-center justify-center font-bold text-xs shrink-0">{{ d.name.charAt(0) }}</div>
               <div class="min-w-0">
-                <p class="font-semibold text-sm truncate">{{ d.name }}</p>
+                <p class="font-semibold text-sm truncate"><span class="font-mono text-brand-soft text-[10px] mr-1">{{ fleetTag(d.crew_no) }}</span>{{ d.name }}</p>
                 <p class="text-[10px] text-slate-500 truncate">{{ d.rank || 'Rookie' }} · age {{ d.age ?? '—' }} · {{ num(d.shipments_done) }} runs</p>
               </div>
             </div>

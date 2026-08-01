@@ -143,6 +143,7 @@ export interface Trailer {
 
 export interface Driver {
   id: number
+  crew_no?: number | null
   name: string
   age?: number
   avatar_seed: string | null
