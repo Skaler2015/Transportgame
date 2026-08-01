@@ -130,6 +130,16 @@ watch(now, () => {
 })
 // Free (idle) vehicles and where they're parked.
 const freeVehicles = computed(() => vehicles.value.filter((v) => v.available))
+// What service a vehicle needs, so it's visible without leaving the market.
+function vehicleNeed(v: Vehicle): string {
+  return [
+    ((v.condition ?? 100) < 70 || (v.tire_wear ?? 0) > 40) ? 'repair' : '',
+    (v.oil_level ?? 100) < 40 ? 'oil' : '',
+    (v.battery ?? 100) < 40 ? 'battery' : '',
+    !v.is_insured ? 'insurance' : '',
+    !v.is_registered ? 'registration' : '',
+  ].filter(Boolean).join(' · ')
+}
 
 // Per-shipment value & estimated profit, and the totals for everything on the
 // road — same cost model as the contract cards (tolls + tax + fuel).
@@ -607,6 +617,7 @@ onUnmounted(() => clearInterval(poll))
          <div v-for="v in freeVehicles" :key="v.id" class="py-2">
            <p class="text-xs font-medium"><span class="font-mono text-brand-soft mr-1">{{ fleetTag(v.fleet_no) }}</span>{{ v.nickname || v.model?.name }}</p>
            <p class="text-[11px] text-slate-400 mt-0.5">📍 {{ v.city?.name || '—' }}</p>
+           <p v-if="vehicleNeed(v)" class="text-[10px] text-gold mt-0.5">🛠 needs: {{ vehicleNeed(v) }}</p>
          </div>
        </div>
        <p v-else class="text-xs text-slate-500">All trucks are out on the road.</p>
