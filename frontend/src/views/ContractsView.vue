@@ -155,18 +155,44 @@ const roadTotals = computed(() =>
   ),
 )
 
-// Contract table: expand-to-dispatch drawer + header sorting (server-side).
+// Contract table: expand-to-dispatch drawer + client-side sort on any column.
 const expandedContract = ref<number | null>(null)
 function toggleContract(id: number) {
   expandedContract.value = expandedContract.value === id ? null : id
 }
-function setContractSort(k: string) {
-  filters.value.sort = k
-  load()
+
+type CSortKey = 'cargo' | 'from' | 'to' | 'status' | 'dist' | 'load' | 'eta' | 'value' | 'profit' | 'diff'
+const cSort = ref<{ k: CSortKey; dir: 'asc' | 'desc' } | null>(null)
+function clickSort(k: CSortKey) {
+  if (cSort.value?.k === k) cSort.value = { k, dir: cSort.value.dir === 'asc' ? 'desc' : 'asc' }
+  else cSort.value = { k, dir: ['from', 'to', 'cargo'].includes(k) ? 'asc' : 'desc' }
 }
-function sortMark(k: string): string {
-  return filters.value.sort === k ? ' ▾' : ''
+function sortMark(k: CSortKey): string {
+  return cSort.value?.k === k ? (cSort.value.dir === 'asc' ? ' ▲' : ' ▼') : ''
 }
+function cVal(c: Contract, k: CSortKey): number | string {
+  switch (k) {
+    case 'cargo': return (c.commodity?.name ?? '').toLowerCase()
+    case 'from': return (c.origin?.name ?? '').toLowerCase()
+    case 'to': return (c.destination?.name ?? '').toLowerCase()
+    case 'status': return c.at_fleet_city ? (c.fleet_arriving ? 1 : 2) : 0
+    case 'dist': case 'eta': return c.distance_km ?? 0
+    case 'load': return c.total_weight ?? 0
+    case 'value': return c.payout ?? 0
+    case 'profit': return costBreakdown(c).profit
+    default: return c.difficulty ?? 0
+  }
+}
+// Server order (backhaul-floated) by default; a header click sorts client-side.
+const sortedContracts = computed(() => {
+  if (!cSort.value) return contracts.value
+  const { k, dir } = cSort.value
+  return [...contracts.value].sort((a, b) => {
+    const av = cVal(a, k), bv = cVal(b, k)
+    const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number)
+    return dir === 'asc' ? cmp : -cmp
+  })
+})
 
 // ---- compatibility (mirrors Operations) -----------------------------------
 function modeOk(v: Vehicle, c: Contract): boolean {
@@ -375,24 +401,24 @@ onUnmounted(() => clearInterval(poll))
       <div class="overflow-x-auto">
       <table class="w-full text-sm min-w-[880px] border-collapse">
         <thead class="text-[10px] uppercase tracking-wider text-slate-400 select-none bg-ink-900/80 backdrop-blur sticky top-0 z-10">
-          <tr class="border-b border-white/10">
-            <th class="text-left px-3 py-3 font-semibold">Cargo</th>
-            <th class="text-left px-2 font-semibold">From</th>
-            <th class="text-left px-2 font-semibold">To</th>
-            <th class="text-center px-2">Status</th>
-            <th class="text-right px-2 cursor-pointer hover:text-brand-soft transition" @click="setContractSort('distance_km')">Dist{{ sortMark('distance_km') }}</th>
-            <th class="text-right px-2">Load</th>
-            <th class="text-right px-2">ETA</th>
-            <th class="text-right px-2 cursor-pointer hover:text-brand-soft transition" @click="setContractSort('payout')">Value{{ sortMark('payout') }}</th>
-            <th class="text-right px-2">Profit</th>
-            <th class="text-center px-2 cursor-pointer hover:text-brand-soft transition" @click="setContractSort('difficulty')">Diff{{ sortMark('difficulty') }}</th>
-            <th class="text-right px-3"></th>
+          <tr class="border-b border-white/10 [&>th]:cursor-pointer [&>th:hover]:text-brand-soft [&>th]:transition">
+            <th class="text-left px-3 py-3 font-semibold" @click="clickSort('cargo')">Cargo{{ sortMark('cargo') }}</th>
+            <th class="text-left px-2 font-semibold" @click="clickSort('from')">From{{ sortMark('from') }}</th>
+            <th class="text-left px-2 font-semibold" @click="clickSort('to')">To{{ sortMark('to') }}</th>
+            <th class="text-center px-2" @click="clickSort('status')">Status{{ sortMark('status') }}</th>
+            <th class="text-right px-2" @click="clickSort('dist')">Dist{{ sortMark('dist') }}</th>
+            <th class="text-right px-2" @click="clickSort('load')">Load{{ sortMark('load') }}</th>
+            <th class="text-right px-2" @click="clickSort('eta')">ETA{{ sortMark('eta') }}</th>
+            <th class="text-right px-2" @click="clickSort('value')">Value{{ sortMark('value') }}</th>
+            <th class="text-right px-2" @click="clickSort('profit')">Profit{{ sortMark('profit') }}</th>
+            <th class="text-center px-2" @click="clickSort('diff')">Diff{{ sortMark('diff') }}</th>
+            <th class="text-right px-3 !cursor-default"></th>
           </tr>
         </thead>
         <tbody>
-          <template v-for="c in contracts" :key="c.id">
-            <tr class="border-b border-white/5 transition hover:bg-brand/[0.06] odd:bg-white/[0.015]"
-              :class="c.at_fleet_city ? 'bg-brand/[0.07]' : ''">
+          <template v-for="c in sortedContracts" :key="c.id">
+            <tr class="border-b border-white/5 transition hover:bg-brand/[0.06] odd:bg-white/[0.015] cursor-pointer"
+              :class="c.at_fleet_city ? 'bg-brand/[0.07]' : ''" @click="toggleContract(c.id)">
               <!-- Cargo -->
               <td class="px-3 py-2.5 border-l-2" :class="c.at_fleet_city ? (c.fleet_arriving ? 'border-gold/70' : 'border-brand') : 'border-transparent'">
                 <div class="flex items-center gap-2 min-w-0">
@@ -422,7 +448,7 @@ onUnmounted(() => clearInterval(poll))
               </td>
               <td class="px-2 text-center"><DifficultyStars :value="c.difficulty" /></td>
               <td class="px-3 py-2 text-right whitespace-nowrap">
-                <button class="btn-primary !py-1 !px-3 text-[11px]" @click="toggleContract(c.id)">
+                <button class="btn-primary !py-1 !px-3 text-[11px]" @click.stop="toggleContract(c.id)">
                   {{ expandedContract === c.id ? 'Close' : 'GO →' }}
                 </button>
               </td>
