@@ -149,11 +149,10 @@ function vehicleNeeds(v: Vehicle): string[] {
   ].filter(Boolean)
 }
 const NEED_ICON: Record<string, string> = { repair: '🔧', oil: '🛢', battery: '🔋', insurance: '🛡', registration: '📋' }
-// Free vehicles that need any service — for the mobile alert banner.
+// Free vehicles that need any service — for the mobile alert banner, which
+// expands inline so a truck can be serviced right there (no scrolling away).
 const vehiclesNeedingFix = computed(() => freeVehicles.value.filter((v) => vehicleNeeds(v).length > 0))
-function scrollToFreeVehicles() {
-  document.getElementById('free-vehicles')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
+const serviceOpen = ref(false)
 // Every trailer that isn't on the road — including worn-out ones (condition
 // too low to count as "available"), so the player can repair them from here.
 const freeTrailers = computed(() => trailers.value.filter((t) => t.status !== 'en_route'))
@@ -554,13 +553,38 @@ onUnmounted(() => clearInterval(poll))
       </div>
     </div>
 
-    <!-- Mobile alert: a free vehicle needs service. Tap → jump to Free Vehicles. -->
-    <button v-if="vehiclesNeedingFix.length" type="button"
-      class="lg:hidden w-full glass !p-3 ring-1 ring-gold/40 flex items-center justify-between gap-2 text-left"
-      @click="scrollToFreeVehicles">
-      <span class="text-sm text-gold">🛠 {{ vehiclesNeedingFix.length }} vehicle(s) need service</span>
-      <span class="text-xs text-brand-soft shrink-0">Tap to fix →</span>
-    </button>
+    <!-- Mobile alert: free vehicles that need service. Tap to expand the list
+         right here and fix each one in place — no scrolling to another panel. -->
+    <div v-if="vehiclesNeedingFix.length" class="lg:hidden glass !p-3 ring-1 ring-gold/40">
+      <button type="button" class="w-full flex items-center justify-between gap-2 text-left"
+        @click="serviceOpen = !serviceOpen">
+        <span class="text-sm text-gold">🛠 {{ vehiclesNeedingFix.length }} vehicle(s) need service</span>
+        <span class="text-xs text-brand-soft shrink-0">{{ serviceOpen ? 'Hide ▲' : 'Fix here ▼' }}</span>
+      </button>
+      <div v-if="serviceOpen" class="mt-2 pt-2 border-t border-white/10 divide-y divide-white/5">
+        <div v-for="v in vehiclesNeedingFix" :key="v.id" class="py-2">
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-xs font-medium truncate">
+              <span class="font-mono text-brand-soft mr-1">{{ fleetTag(v.fleet_no) }}</span>{{ v.nickname || v.model?.name }}
+            </p>
+            <span class="text-[11px] text-slate-400 shrink-0">📍 {{ v.city?.name || '—' }}</span>
+          </div>
+          <div class="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+            <span>🔧 {{ Math.round(v.condition ?? 100) }}%</span>
+            <span>🛢 {{ Math.round(v.oil_level ?? 100) }}%</span>
+            <span>🔋 {{ Math.round(v.battery ?? 100) }}%</span>
+            <span>⛽ {{ Math.round(v.fuel_pct ?? 100) }}%</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-1 mt-1">
+            <button v-for="need in vehicleNeeds(v)" :key="need"
+              class="chip bg-gold/15 text-gold hover:bg-gold/25 text-[10px] capitalize disabled:opacity-40"
+              :disabled="servingVeh === v.id" @click="fixNeed(v, need)">
+              {{ NEED_ICON[need] }} {{ servingVeh === v.id ? '…' : need }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Mobile: compact On-the-Road summary, right above the contracts.
          Just the four headline numbers — no route list, keeps it tiny. -->
