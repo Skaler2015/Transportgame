@@ -123,8 +123,12 @@ class ShipmentService
 
             $speedFactor = $driver->speedFactor() * (1 + ($bonuses['speed_factor'] ?? 0)) * $engineSpeed;
 
-            $speed = max(30, $model->top_speed * $speedFactor * $weatherFactor * $trafficFactor * $roadFactor);
-            $travelHours = $distance / $speed;
+            // Travel at a base km-per-real-minute, scaled by driver/weather/
+            // traffic/road conditions. km/h is derived only for display.
+            $conditionFactor = $speedFactor * $weatherFactor * $trafficFactor * $roadFactor;
+            $kmPerMinute = max(20, config('transoria.shipment.km_per_minute', 225) * $conditionFactor);
+            $speed = $kmPerMinute * 60; // km/h equivalent, stored for display
+            $travelSeconds = $distance / $kmPerMinute * 60;
 
             // Fuel drawn from the vehicle's own tank (electric/hydrogen sip a
             // little; econ 0 models need none). You pay for fuel when you refuel,
@@ -139,9 +143,8 @@ class ShipmentService
                 );
             }
 
-            $secondsPerGameHour = config('transoria.tick.seconds_per_game_hour', 60);
             $departedAt = now();
-            $etaAt = $departedAt->copy()->addSeconds((int) max(20, round($travelHours * $secondsPerGameHour)));
+            $etaAt = $departedAt->copy()->addSeconds((int) max(20, round($travelSeconds)));
 
             $shipment = Shipment::create([
                 'company_id' => $company->id,

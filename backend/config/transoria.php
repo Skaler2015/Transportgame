@@ -80,8 +80,8 @@ return [
     'contracts' => [
         'target_open_per_hub' => 12,  // keep roughly this many open per producing city
         'min_payout' => 2_000_00,     // floor on contract payout (cents) — no job pays under ₹2,000
-        'rate_per_km_min' => 4.0,     // freight priced per km — lower bound (₹/km)
-        'rate_per_km_max' => 7.0,     // freight priced per km — upper bound (₹/km)
+        'rate_per_km_min' => 5.0,     // freight priced per km — lower bound (₹/km)
+        'rate_per_km_max' => 5.0,     // freight priced per km — upper bound (₹/km)
         'base_margin' => 0.28,        // (legacy) payout premium over raw cargo value spread
         'rush_margin_bonus' => 0.35,  // extra premium for rush jobs
         'penalty_pct' => 0.4,         // failure penalty as fraction of payout
@@ -92,6 +92,9 @@ return [
 
     // Shipment resolution.
     'shipment' => [
+        // Base travel speed in km per REAL minute (before weather/traffic/road/
+        // driver factors). Higher = faster deliveries.
+        'km_per_minute' => 225,
         'fuel_price_weight' => 1.0,
         'late_payout_pct' => 0.55,    // fraction of payout still paid if late
         'accident_base_chance' => 0.03,
