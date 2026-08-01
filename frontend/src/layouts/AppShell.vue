@@ -31,6 +31,7 @@ const nav = [
   { to: '/accounts', label: 'Accounts', icon: '▤' },
   { to: '/guilds', label: 'Guilds', icon: '⚑' },
   { to: '/map', label: 'Live Map', icon: '◎' },
+  { to: '/news', label: 'News Wire', icon: '📰' },
   { to: '/market', label: 'Markets', icon: '≣' },
   { to: '/research', label: 'R&D Tree', icon: '✦' },
   { to: '/achievements', label: 'Achievements', icon: '🏆' },

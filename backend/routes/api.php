@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AccountsController;
+use App\Http\Controllers\Api\AchievementController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\ContractController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\Api\GarageController;
 use App\Http\Controllers\Api\GuildController;
 use App\Http\Controllers\Api\MarketController;
 use App\Http\Controllers\Api\MissionController;
+use App\Http\Controllers\Api\NewsController;
 use App\Http\Controllers\Api\ResearchController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\TrailerController;
@@ -83,6 +85,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/shipments/dispatch', [ShipmentController::class, 'dispatch']);
 
     Route::get('/achievements', [AchievementController::class, 'index']);
+    Route::get('/news', [NewsController::class, 'index']);
 
     Route::get('/research', [ResearchController::class, 'index']);
     Route::post('/research/{node}/unlock', [ResearchController::class, 'unlock']);

@@ -42,6 +42,7 @@ class EnsureSchemaUpToDate
             return Schema::hasTable('trailer_models')
                 && Schema::hasTable('trailers')
                 && Schema::hasTable('company_achievements')
+                && Schema::hasTable('news_items')
                 && Schema::hasColumn('companies', 'onboarded_at');
         } catch (\Throwable $e) {
             // DB momentarily unreachable — don't trigger a migrate storm.

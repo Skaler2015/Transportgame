@@ -226,6 +226,17 @@ export interface Achievement {
   unlocked_at: string | null
 }
 
+export interface NewsItem {
+  id: number
+  category: string
+  severity: string
+  icon: string
+  headline: string
+  body: string | null
+  country: string | null
+  occurred_at: string
+}
+
 export interface Dashboard {
   company: Company
   active_shipments: Shipment[]
