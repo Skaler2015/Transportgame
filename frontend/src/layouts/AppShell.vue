@@ -161,7 +161,7 @@ async function logout() {
           </div>
 
           <div class="ml-auto flex items-center gap-2 sm:gap-4">
-            <div class="hidden sm:block text-right">
+            <div class="text-right">
               <p class="stat-label">Cash</p>
               <p class="font-mono font-semibold text-gold leading-none">{{ credits(company?.cash ?? 0) }}</p>
             </div>
@@ -169,7 +169,7 @@ async function logout() {
               <p class="stat-label">Company Value</p>
               <p class="font-mono font-semibold leading-none">{{ credits(company?.value ?? 0, { compact: true }) }}</p>
             </div>
-            <div class="text-right">
+            <div class="hidden sm:block text-right">
               <p class="stat-label">Reputation</p>
               <p class="font-mono font-semibold text-brand-soft leading-none">{{ num(company?.reputation ?? 0) }}</p>
             </div>
