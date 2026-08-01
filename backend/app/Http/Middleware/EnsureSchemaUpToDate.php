@@ -39,7 +39,10 @@ class EnsureSchemaUpToDate
     protected function criticalTablesPresent(): bool
     {
         try {
-            return Schema::hasTable('trailer_models') && Schema::hasTable('trailers');
+            return Schema::hasTable('trailer_models')
+                && Schema::hasTable('trailers')
+                && Schema::hasTable('company_achievements')
+                && Schema::hasColumn('companies', 'onboarded_at');
         } catch (\Throwable $e) {
             // DB momentarily unreachable — don't trigger a migrate storm.
             return true;
