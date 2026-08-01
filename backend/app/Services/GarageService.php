@@ -165,6 +165,41 @@ class GarageService
         return ['vehicle' => $vehicle, 'message' => "{$label} done."];
     }
 
+    /**
+     * Full-service AND refuel every idle vehicle the company owns, in one go,
+     * stopping when cash runs out. Skips en-route vehicles and any already in
+     * perfect shape.
+     *
+     * @return array{serviced: int, total: int}
+     */
+    public function fullServiceAll(Company $company): array
+    {
+        $vehicles = Vehicle::where('company_id', $company->id)
+            ->where('status', Vehicle::STATUS_IDLE)
+            ->with('model', 'city')
+            ->get();
+
+        $count = 0;
+        $total = 0;
+
+        foreach ($vehicles as $vehicle) {
+            try {
+                // Pass the same $company instance so its running cash balance
+                // (mutated by each ledger post) is accurate for the next check.
+                $result = $this->fullService($company, $vehicle);
+                $count++;
+                $total += $result['cost'];
+            } catch (RuntimeException $e) {
+                if (str_contains($e->getMessage(), 'enough cash')) {
+                    break; // can't afford any more
+                }
+                // "already serviced" — nothing to do for this one; skip.
+            }
+        }
+
+        return ['serviced' => $count, 'total' => $total];
+    }
+
     /** Buy the next level of an upgrade (engine|tires|trailer). */
     public function upgrade(Company $company, Vehicle $vehicle, string $kind): Vehicle
     {

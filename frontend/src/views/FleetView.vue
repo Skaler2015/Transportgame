@@ -73,6 +73,16 @@ async function refuel(v: Vehicle) {
   } catch (e) { toast.error(apiError(e)) } finally { working.value = null }
 }
 
+const servicingAll = ref(false)
+async function serviceAll() {
+  servicingAll.value = true
+  try {
+    const { data } = await api.post('/fleet/full-service-all')
+    toast.success(data.message)
+    await load(); game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)) } finally { servicingAll.value = false }
+}
+
 async function fullService(v: Vehicle) {
   working.value = v.id
   try {
@@ -146,6 +156,9 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
         <h1 class="text-2xl font-bold">Fleet &amp; Dealership</h1>
         <p class="text-slate-400 text-sm">Trucks, trailers, fuel and multi-modal craft — everything that hauls.</p>
       </div>
+      <button class="btn-primary !py-1.5" :disabled="servicingAll" @click="serviceAll">
+        {{ servicingAll ? 'Servicing…' : '⚡ Service & Fuel All' }}
+      </button>
       <div class="flex flex-wrap gap-2 p-1 rounded-xl bg-ink-900/70">
         <button class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition"
           :class="tab === 'fleet' ? 'bg-brand text-ink-950' : 'text-slate-400'" @click="tab = 'fleet'">

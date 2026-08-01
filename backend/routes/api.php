@@ -73,6 +73,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dealership', [FleetController::class, 'dealership']);
     Route::post('/dealership/{model}/buy', [FleetController::class, 'buy']);
     Route::post('/vehicles/{vehicle}/refuel', [FleetController::class, 'refuel']);
+    Route::post('/fleet/full-service-all', [FleetController::class, 'fullServiceAll']);
 
     // Trailers: yard, dealership & purchase.
     Route::get('/trailers', [TrailerController::class, 'index']);

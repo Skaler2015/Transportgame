@@ -25,6 +25,15 @@ let poll: number | undefined
 
 const MODE_ICON: Record<string, string> = { road: '🚚', rail: '🚆', sea: '🚢', air: '✈️' }
 
+const KM_PER_MIN = 225
+function etaText(km: number): string {
+  const secs = Math.max(20, Math.round((km / KM_PER_MIN) * 60))
+  if (secs < 60) return `~${secs}s`
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  return s ? `~${m}m ${s}s` : `~${m}m`
+}
+
 async function loadAll() {
   // Independent loads so a single failing endpoint doesn't blank the board.
   const [m, f, tr, d, s] = await Promise.allSettled([
@@ -102,6 +111,17 @@ function fuelShort(c: Contract): boolean {
 const activeShipments = computed(() => shipments.value.filter((s) => s.status === 'en_route'))
 const pastShipments = computed(() => shipments.value.filter((s) => s.status !== 'en_route').slice(0, 8))
 
+const servicingAll = ref(false)
+async function serviceAll() {
+  servicingAll.value = true
+  try {
+    const { data } = await api.post('/fleet/full-service-all')
+    toast.success(data.message)
+    await loadAll()
+    game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)) } finally { servicingAll.value = false }
+}
+
 async function refuel(c: Contract) {
   const v = selectedVehicle(c)
   if (!v) return
@@ -160,9 +180,14 @@ onUnmounted(() => clearInterval(poll))
 
 <template>
   <div class="space-y-6">
-    <div>
-      <h1 class="text-2xl font-bold">Operations — Job Board</h1>
-      <p class="text-slate-400 text-sm">Assign a vehicle, a matching trailer, a driver and fuel — then roll.</p>
+    <div class="flex items-end justify-between flex-wrap gap-3">
+      <div>
+        <h1 class="text-2xl font-bold">Operations — Job Board</h1>
+        <p class="text-slate-400 text-sm">Assign a vehicle, a matching trailer, a driver and fuel — then roll.</p>
+      </div>
+      <button class="btn-ghost !py-1.5" :disabled="servicingAll" @click="serviceAll">
+        {{ servicingAll ? 'Servicing…' : '⚡ Service & Fuel All' }}
+      </button>
     </div>
 
     <!-- Ready to dispatch -->
@@ -179,7 +204,7 @@ onUnmounted(() => clearInterval(poll))
           </div>
           <p class="text-sm font-semibold mt-2">{{ c.origin?.name }} <span class="text-brand">→</span> {{ c.destination?.name }}</p>
           <p class="text-[11px] text-slate-400">
-            {{ num(c.distance_km) }} km · {{ num(c.total_weight ?? 0, 1) }} t · {{ num(c.total_volume ?? 0, 1) }} m³
+            {{ num(c.distance_km) }} km · {{ num(c.total_weight ?? 0, 1) }} t · ⏱ {{ etaText(c.distance_km) }}
             <span v-if="c.commodity?.requires_reefer" class="chip bg-cyan-500/15 text-cyan-300 ml-1">reefer</span>
             <span v-if="c.commodity?.requires_tanker" class="chip bg-amber-500/15 text-amber-300 ml-1">tanker</span>
             <span v-if="c.commodity?.is_hazardous" class="chip bg-loss/15 text-loss ml-1">hazmat</span>

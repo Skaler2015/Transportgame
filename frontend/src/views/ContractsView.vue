@@ -25,6 +25,17 @@ const selection = ref<Record<number, { vehicle_id: number | null; trailer_id: nu
 
 const sortedCities = computed(() => [...game.cities].sort((a, b) => a.name.localeCompare(b.name)))
 
+// Rough delivery time from the base travel speed (225 km/min); real time
+// varies a little with weather/traffic/road/driver.
+const KM_PER_MIN = 225
+function etaText(km: number): string {
+  const secs = Math.max(20, Math.round((km / KM_PER_MIN) * 60))
+  if (secs < 60) return `~${secs}s`
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  return s ? `~${m}m ${s}s` : `~${m}m`
+}
+
 async function load(silent = false) {
   if (!silent) loading.value = true
   try {
@@ -94,6 +105,18 @@ function canDispatch(c: Contract): boolean {
   return !!sel?.vehicle_id && !!sel?.driver_id && (!needsTrailer(c) || !!sel?.trailer_id)
 }
 
+const servicingAll = ref(false)
+async function serviceAll() {
+  servicingAll.value = true
+  try {
+    const { data } = await api.post('/fleet/full-service-all')
+    toast.success(data.message)
+    await loadFleet()
+    load(true)
+    game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)) } finally { servicingAll.value = false }
+}
+
 async function accept(c: Contract) {
   accepting.value = c.id
   try {
@@ -147,6 +170,9 @@ onUnmounted(() => clearInterval(poll))
         <h1 class="text-2xl font-bold">Contract Market</h1>
         <p class="text-slate-400 text-sm">Claim a job and dispatch it right here. Auto-refreshes as new jobs appear.</p>
       </div>
+      <button class="btn-ghost !py-1.5" :disabled="servicingAll" @click="serviceAll">
+        {{ servicingAll ? 'Servicing…' : '⚡ Service & Fuel All' }}
+      </button>
     </div>
 
     <!-- Filters -->
@@ -198,7 +224,10 @@ onUnmounted(() => clearInterval(poll))
           <span class="text-brand">→</span>
           <span>{{ c.destination?.name }}</span>
         </div>
-        <p class="text-[11px] text-slate-400">{{ num(c.distance_km) }} km · {{ num(c.units) }} units · {{ num(c.total_weight ?? 0, 1) }} t</p>
+        <p class="text-[11px] text-slate-400">
+          {{ num(c.distance_km) }} km · {{ num(c.units) }} units · {{ num(c.total_weight ?? 0, 1) }} t
+          <span class="text-brand-soft">· ⏱ {{ etaText(c.distance_km) }}</span>
+        </p>
 
         <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
           <div class="rounded-lg bg-ink-900/60 px-3 py-2">

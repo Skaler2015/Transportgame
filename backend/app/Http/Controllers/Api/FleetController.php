@@ -9,6 +9,7 @@ use App\Http\Resources\VehicleResource;
 use App\Models\Vehicle;
 use App\Models\VehicleModel;
 use App\Services\CompanyService;
+use App\Services\GarageService;
 use Illuminate\Http\Request;
 use RuntimeException;
 
@@ -16,7 +17,26 @@ class FleetController extends Controller
 {
     use ResolvesCompany;
 
-    public function __construct(private readonly CompanyService $companies) {}
+    public function __construct(
+        private readonly CompanyService $companies,
+        private readonly GarageService $garage,
+    ) {}
+
+    /** One click: full-service + refuel every idle vehicle. */
+    public function fullServiceAll(Request $request)
+    {
+        $company = $this->company($request);
+        $result = $this->garage->fullServiceAll($company);
+
+        if ($result['serviced'] === 0) {
+            return response()->json(['message' => 'No idle vehicle needed servicing.']);
+        }
+
+        return response()->json([
+            'message' => "Serviced & fuelled {$result['serviced']} vehicle(s).",
+            'serviced' => $result['serviced'],
+        ]);
+    }
 
     /** The company's owned vehicles. */
     public function index(Request $request)

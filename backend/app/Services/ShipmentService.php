@@ -127,7 +127,7 @@ class ShipmentService
             // traffic/road conditions. km/h is derived only for display.
             $conditionFactor = $speedFactor * $weatherFactor * $trafficFactor * $roadFactor;
             $kmPerMinute = max(20, config('transoria.shipment.km_per_minute', 225) * $conditionFactor);
-            $speed = $kmPerMinute * 60; // km/h equivalent, stored for display
+            $speed = round($kmPerMinute, 2); // stored as km/min (avg_speed column)
             $travelSeconds = $distance / $kmPerMinute * 60;
 
             // Fuel drawn from the vehicle's own tank (electric/hydrogen sip a
