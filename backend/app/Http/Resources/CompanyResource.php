@@ -17,6 +17,8 @@ class CompanyResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'slug' => $this->slug,
+            'country' => $this->country,
+            'country_name' => config('transoria.countries.'.$this->country, $this->country),
             'motto' => $this->motto,
             'logo_color' => $this->logo_color,
             'cash' => (int) $this->cash,

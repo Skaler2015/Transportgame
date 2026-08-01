@@ -29,7 +29,11 @@ class ContractController extends Controller
             'haulable' => ['nullable', 'boolean'],
         ]);
 
-        $query = Contract::onMarket()->with(['commodity', 'origin', 'destination']);
+        $company = $this->company($request);
+
+        $query = Contract::onMarket()->with(['commodity', 'origin', 'destination'])
+            // Only domestic contracts — origin city in the player's country.
+            ->whereHas('origin', fn ($q) => $q->where('country', $company->country));
 
         foreach (['origin_city_id', 'destination_city_id', 'commodity_id'] as $f) {
             if (! empty($filters[$f])) {

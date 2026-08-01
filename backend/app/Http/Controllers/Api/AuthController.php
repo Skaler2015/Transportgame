@@ -22,6 +22,7 @@ class AuthController extends Controller
             'email' => ['required', 'email', 'max:120', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
             'company_name' => ['required', 'string', 'max:60'],
+            'country' => ['nullable', 'string', 'in:'.implode(',', array_keys(config('transoria.countries')))],
         ]);
 
         $user = User::create([
@@ -30,7 +31,7 @@ class AuthController extends Controller
             'password' => $data['password'], // hashed via cast
         ]);
 
-        $company = $this->companies->found($user, $data['company_name']);
+        $company = $this->companies->found($user, $data['company_name'], $data['country'] ?? null);
 
         $token = $user->createToken('transoria')->plainTextToken;
 

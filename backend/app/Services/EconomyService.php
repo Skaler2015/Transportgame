@@ -169,13 +169,22 @@ class EconomyService
             $priceLookup[$mp->commodity_id][$mp->city_id] ??= $mp->price;
         }
 
+        // Cities grouped by country — contracts stay domestic (origin and
+        // destination in the same country).
+        $byCountry = $cities->groupBy('country');
+
         // For each producing (city, commodity) pair, ensure enough open offers.
         $pairs = DB::table('city_commodity')->where('production', '>', 0)->get();
 
         foreach ($pairs as $pair) {
             $commodity = $commodities[$pair->commodity_id] ?? null;
             $origin = $cities->firstWhere('id', $pair->city_id);
-            if (! $commodity || ! $origin) {
+            if (! $commodity || ! $origin || ! $origin->country) {
+                continue; // skip cities not attached to a playable country
+            }
+
+            $domestic = $byCountry[$origin->country] ?? collect();
+            if ($domestic->count() < 2) {
                 continue;
             }
 
@@ -188,7 +197,7 @@ class EconomyService
             $need = max(0, (int) ceil($cfg['target_open_per_hub'] / 3) - $openCount);
 
             for ($i = 0; $i < $need; $i++) {
-                $contract = $this->mintContract($origin, $commodity, $cities, $priceLookup, $events);
+                $contract = $this->mintContract($origin, $commodity, $domestic, $priceLookup, $events);
                 if ($contract) {
                     $created++;
                 }

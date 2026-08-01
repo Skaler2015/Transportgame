@@ -34,6 +34,7 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
 // Public world reference data (read-only).
+Route::get('/world/countries', [WorldController::class, 'countries']);
 Route::get('/world/cities', [WorldController::class, 'cities']);
 Route::get('/world/commodities', [WorldController::class, 'commodities']);
 Route::get('/world/events', [WorldController::class, 'events']);
@@ -50,6 +51,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
     Route::get('/company', [CompanyController::class, 'show']);
+    Route::post('/company/country', [CompanyController::class, 'updateCountry']);
     Route::get('/dashboard', [CompanyController::class, 'dashboard']);
     Route::get('/ledger', [CompanyController::class, 'ledger']);
 

@@ -14,7 +14,7 @@ export const useAuthStore = defineStore('auth', () => {
   const company = ref<Company | null>(null)
   const ready = ref(false)
 
-  async function register(payload: { name: string; email: string; password: string; company_name: string }) {
+  async function register(payload: { name: string; email: string; password: string; company_name: string; country?: string }) {
     const { data } = await api.post('/register', payload)
     setToken(data.token)
     user.value = data.user

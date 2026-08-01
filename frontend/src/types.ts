@@ -39,6 +39,8 @@ export interface Company {
   id: number
   name: string
   slug: string
+  country?: string
+  country_name?: string
   motto: string | null
   logo_color: string
   cash: number

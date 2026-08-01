@@ -6,12 +6,14 @@ import {
 } from 'chart.js'
 import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
+import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { num } from '../utils/format'
 
 ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Filler)
 
 const game = useGameStore()
+const auth = useAuthStore()
 const toast = useToastStore()
 
 interface Market { city_id: number; city: string; region: string; price: number; base_price: number; demand_index: number; delta_pct: number }
@@ -28,7 +30,7 @@ const bestSell = computed(() => markets.value.reduce((a, b) => (b.price > a.pric
 async function loadMarket() {
   if (!commodityId.value) return
   try {
-    const { data } = await api.get('/market', { params: { commodity_id: commodityId.value } })
+    const { data } = await api.get('/market', { params: { commodity_id: commodityId.value, country: auth.company?.country } })
     markets.value = data.markets
     basePrice.value = data.commodity.base_price
     historyCity.value = bestSell.value?.city_id ?? markets.value[0]?.city_id ?? null

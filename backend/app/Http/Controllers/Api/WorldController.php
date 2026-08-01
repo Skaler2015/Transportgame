@@ -14,9 +14,24 @@ use Illuminate\Http\Request;
 
 class WorldController extends Controller
 {
-    public function cities()
+    /** Cities for a country (defaults to the caller's company / the default). */
+    public function cities(Request $request)
     {
-        return CityResource::collection(City::orderBy('unlock_level')->orderBy('name')->get());
+        $country = $request->query('country');
+        if (! array_key_exists($country, config('transoria.countries'))) {
+            $country = $request->user()?->company?->country ?? config('transoria.default_country');
+        }
+
+        return CityResource::collection(
+            City::where('country', $country)->orderBy('unlock_level')->orderBy('name')->get()
+        );
+    }
+
+    /** The list of playable countries (for the sign-up picker). */
+    public function countries()
+    {
+        return response()->json(['data' => collect(config('transoria.countries'))
+            ->map(fn ($name, $code) => ['code' => $code, 'name' => $name])->values()]);
     }
 
     public function commodities()

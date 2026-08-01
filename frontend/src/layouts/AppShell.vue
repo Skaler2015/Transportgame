@@ -33,6 +33,7 @@ const nav = [
   { to: '/market', label: 'Markets', icon: '≣' },
   { to: '/research', label: 'R&D Tree', icon: '✦' },
   { to: '/leaderboard', label: 'Leaderboard', icon: '♛' },
+  { to: '/settings', label: 'Settings', icon: '⚙' },
 ]
 
 const company = computed(() => game.dashboard?.company ?? auth.company)
@@ -120,7 +121,7 @@ async function logout() {
             </div>
             <div class="min-w-0">
               <p class="font-semibold leading-none truncate">{{ company?.name }}</p>
-              <p class="text-[11px] text-slate-400 truncate">{{ company?.headquarters?.name }} HQ</p>
+              <p class="text-[11px] text-slate-400 truncate">{{ company?.headquarters?.name }} HQ · {{ company?.country_name || company?.country }}</p>
             </div>
           </div>
 

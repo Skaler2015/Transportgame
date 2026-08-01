@@ -26,15 +26,21 @@ class CompanyService
         private readonly MissionService $missions,
     ) {}
 
-    /** Found a new company for a user with the starter loadout. */
-    public function found(User $user, string $companyName): Company
+    /** Found a new company for a user with the starter loadout in a country. */
+    public function found(User $user, string $companyName, ?string $country = null): Company
     {
         $starter = config('transoria.starter');
-        $hq = $this->pickStarterCity() ?? City::where('unlock_level', 1)->inRandomOrder()->first() ?? City::first();
+        $country = array_key_exists($country, config('transoria.countries'))
+            ? $country : config('transoria.default_country');
+
+        $hq = $this->pickStarterCity($country)
+            ?? City::where('country', $country)->where('unlock_level', 1)->inRandomOrder()->first()
+            ?? City::where('country', $country)->first();
 
         $company = Company::create([
             'user_id' => $user->id,
             'name' => $companyName,
+            'country' => $country,
             'slug' => $this->uniqueSlug($companyName),
             'headquarters_city_id' => $hq?->id,
             'cash' => $starter['cash'],
@@ -66,6 +72,53 @@ class CompanyService
         $this->missions->ensure($company);
 
         return $company->fresh(['vehicles', 'drivers', 'headquarters']);
+    }
+
+    /**
+     * Move a company to a different country: relocate HQ + fleet to a city in
+     * the new country, stand down any active shipments, and release contracts
+     * that belonged to the old country. Idempotent-friendly.
+     */
+    public function relocateToCountry(Company $company, string $country): Company
+    {
+        if (! array_key_exists($country, config('transoria.countries'))) {
+            throw new RuntimeException('That country is not available.');
+        }
+
+        $hq = $this->pickStarterCity($country)
+            ?? City::where('country', $country)->where('unlock_level', 1)->inRandomOrder()->first()
+            ?? City::where('country', $country)->first();
+
+        if (! $hq) {
+            throw new RuntimeException('That country has no cities yet.');
+        }
+
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($company, $country, $hq) {
+            // Stand down active shipments so trucks/drivers are free again.
+            \App\Models\Shipment::where('company_id', $company->id)
+                ->where('status', \App\Models\Shipment::STATUS_EN_ROUTE)
+                ->update(['status' => \App\Models\Shipment::STATUS_FAILED, 'arrived_at' => now()]);
+
+            // Release contracts that were claimed/open for this company.
+            Contract::where('company_id', $company->id)
+                ->whereIn('status', [Contract::STATUS_ACCEPTED, Contract::STATUS_IN_PROGRESS])
+                ->update(['status' => Contract::STATUS_EXPIRED]);
+
+            // Relocate the whole fleet to the new HQ and free them up.
+            Vehicle::where('company_id', $company->id)->update([
+                'city_id' => $hq->id,
+                'status' => Vehicle::STATUS_IDLE,
+            ]);
+            Driver::where('company_id', $company->id)
+                ->where('status', Driver::STATUS_DRIVING)
+                ->update(['status' => Driver::STATUS_AVAILABLE]);
+
+            $company->country = $country;
+            $company->headquarters_city_id = $hq->id;
+            $company->save();
+
+            return $company->fresh(['headquarters']);
+        });
     }
 
     /** Claim an open market contract for a company. */
@@ -128,12 +181,14 @@ class CompanyService
     }
 
     /**
-     * A level-1 city that produces at least one light, non-special commodity,
-     * so a starter mini-truck always has a haul it can physically carry.
+     * A level-1 city in the given country that produces at least one light,
+     * non-special commodity, so a starter mini-truck always has a haul it can
+     * physically carry.
      */
-    private function pickStarterCity(): ?City
+    private function pickStarterCity(string $country): ?City
     {
         return City::query()
+            ->where('country', $country)
             ->where('unlock_level', 1)
             ->whereHas('commodities', function ($q) {
                 $q->where('city_commodity.production', '>', 0)

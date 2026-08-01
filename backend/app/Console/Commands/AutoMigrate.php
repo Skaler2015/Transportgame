@@ -28,9 +28,12 @@ class AutoMigrate extends Command
         try {
             Artisan::call('migrate', ['--force' => true], $this->getOutput());
             $this->info('Migrations applied.');
+
+            // Keep the world data (real cities, per-country migration) in sync.
+            Artisan::call('transoria:worldsync', [], $this->getOutput());
         } catch (\Throwable $e) {
-            // Never fail the deploy on a migration hiccup; surface it in logs.
-            $this->warn('Auto-migrate skipped: '.$e->getMessage());
+            // Never fail the deploy on a hiccup; surface it in logs.
+            $this->warn('Auto-migrate/worldsync skipped: '.$e->getMessage());
         }
 
         return self::SUCCESS;

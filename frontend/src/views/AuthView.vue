@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
-import { apiError } from '../api/client'
+import { api, apiError } from '../api/client'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -11,7 +11,17 @@ const router = useRouter()
 
 const mode = ref<'login' | 'register'>('register')
 const busy = ref(false)
-const form = ref({ name: '', email: '', password: '', company_name: '' })
+const form = ref({ name: '', email: '', password: '', company_name: '', country: 'IN' })
+const countries = ref<{ code: string; name: string }[]>([])
+
+onMounted(async () => {
+  try {
+    const { data } = await api.get('/world/countries')
+    countries.value = data.data
+  } catch {
+    countries.value = [{ code: 'IN', name: 'India' }]
+  }
+})
 
 async function submit() {
   busy.value = true
@@ -32,7 +42,7 @@ async function submit() {
 }
 
 const features = [
-  ['◎', 'A living world', 'Prices, weather and demand shift every minute across 18 cities.'],
+  ['◎', 'A living world', 'Prices, weather and demand shift every minute across your country.'],
   ['▤', 'Real arbitrage', 'Move goods from surplus to shortage. The spread is your margin.'],
   ['✦', 'Deep progression', 'Level up, research autonomy, and grow from one truck to an empire.'],
 ]
@@ -99,6 +109,13 @@ const features = [
             <div>
               <label class="stat-label">Company Name</label>
               <input v-model="form.company_name" class="input mt-1" placeholder="Skyline Freightways" required />
+            </div>
+            <div>
+              <label class="stat-label">Country</label>
+              <select v-model="form.country" class="input mt-1">
+                <option v-for="c in countries" :key="c.code" :value="c.code">{{ c.name }}</option>
+              </select>
+              <p class="text-[11px] text-slate-500 mt-1">You'll operate in this country's cities.</p>
             </div>
           </template>
 

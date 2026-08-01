@@ -1,0 +1,74 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Models\City;
+use App\Models\Company;
+use App\Models\Contract;
+use App\Services\CompanyService;
+use Database\Seeders\CitySeeder;
+use Database\Seeders\CommoditySeeder;
+use Database\Seeders\VehicleModelSeeder;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Idempotently brings a world up to the real-country model:
+ *  1. seeds commodities, real cities (per country) and the vehicle catalog,
+ *  2. neutralises any legacy fictional cities (no country) so they stop
+ *     producing contracts,
+ *  3. backfills every company's country to the default (India), and
+ *  4. relocates any company still based in a legacy/foreign city onto a real
+ *     city in its own country.
+ *
+ * Safe to run on every deploy.
+ */
+class WorldSync extends Command
+{
+    protected $signature = 'transoria:worldsync';
+
+    protected $description = 'Seed real-country cities and migrate existing companies onto them';
+
+    public function handle(CompanyService $companies): int
+    {
+        $this->info('Seeding commodities, cities and vehicles…');
+        (new CommoditySeeder)->run();
+        (new CitySeeder)->run();
+        (new VehicleModelSeeder)->run();
+
+        // 1. Neutralise legacy fictional cities (those with no real country).
+        $legacyIds = City::whereNull('country')->pluck('id');
+        if ($legacyIds->isNotEmpty()) {
+            DB::table('city_commodity')->whereIn('city_id', $legacyIds)->update(['production' => 0]);
+            Contract::whereIn('origin_city_id', $legacyIds)
+                ->where('status', Contract::STATUS_OPEN)
+                ->update(['status' => Contract::STATUS_EXPIRED]);
+            $this->info("Neutralised {$legacyIds->count()} legacy cities.");
+        }
+
+        // 2. Backfill missing company country to the default.
+        $default = config('transoria.default_country');
+        Company::whereNull('country')->orWhere('country', '')->update(['country' => $default]);
+
+        // 3. Relocate companies still based on a legacy/foreign city.
+        $moved = 0;
+        Company::with('headquarters')->chunkById(200, function ($batch) use ($companies, &$moved) {
+            foreach ($batch as $company) {
+                $hq = $company->headquarters;
+                if (! $hq || $hq->country !== $company->country) {
+                    try {
+                        $companies->relocateToCountry($company, $company->country);
+                        $moved++;
+                    } catch (\Throwable $e) {
+                        $this->warn("Company #{$company->id}: ".$e->getMessage());
+                    }
+                }
+            }
+        });
+
+        $this->info("Relocated {$moved} companies onto real cities.");
+        $this->info('World sync complete.');
+
+        return self::SUCCESS;
+    }
+}

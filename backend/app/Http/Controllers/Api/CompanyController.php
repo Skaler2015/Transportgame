@@ -77,6 +77,29 @@ class CompanyController extends Controller
         ]);
     }
 
+    /** Change the company's country (relocates HQ + fleet). */
+    public function updateCountry(Request $request)
+    {
+        $company = $this->company($request);
+        $data = $request->validate([
+            'country' => ['required', 'string', 'in:'.implode(',', array_keys(config('transoria.countries')))],
+        ]);
+
+        if ($data['country'] === $company->country) {
+            return response()->json(['message' => 'You are already based there.'], 422);
+        }
+
+        try {
+            app(\App\Services\CompanyService::class)->relocateToCountry($company, $data['country']);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'Relocated to '.config('transoria.countries.'.$data['country']).'. Your fleet moved to the new HQ.',
+        ]);
+    }
+
     /** Company financial ledger (paginated). */
     public function ledger(Request $request)
     {

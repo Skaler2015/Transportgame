@@ -12,6 +12,17 @@ return [
     // In-game currency label.
     'currency' => ['code' => 'CR', 'symbol' => '₡', 'name' => 'Credits'],
 
+    // Playable countries. Each player's world (cities, contracts, markets) is
+    // scoped to their chosen country. 'IN' (India) is the default for existing
+    // and new players. Keys are ISO-3166 alpha-2 codes.
+    'countries' => [
+        'IN' => 'India',
+        'US' => 'United States',
+        'GB' => 'United Kingdom',
+        'AE' => 'United Arab Emirates',
+    ],
+    'default_country' => 'IN',
+
     // Starting loadout for a brand-new company.
     'starter' => [
         'cash' => 250_000_00,        // ₡2,500.00 in cents (stored *100)

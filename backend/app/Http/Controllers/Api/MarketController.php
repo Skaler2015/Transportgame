@@ -14,19 +14,26 @@ class MarketController extends Controller
     {
         $data = $request->validate([
             'commodity_id' => ['required', 'integer', 'exists:commodities,id'],
+            'country' => ['nullable', 'string'],
         ]);
 
         $commodity = Commodity::findOrFail($data['commodity_id']);
 
-        // Latest snapshot per city for this commodity.
+        $country = array_key_exists($data['country'] ?? null, config('transoria.countries'))
+            ? $data['country']
+            : ($request->user()?->company?->country ?? config('transoria.default_country'));
+
+        // Cities in this country only.
+        $cities = \App\Models\City::where('country', $country)->get()->keyBy('id');
+
+        // Latest snapshot per (in-country) city for this commodity.
         $latest = MarketPrice::query()
             ->where('commodity_id', $commodity->id)
+            ->whereIn('city_id', $cities->keys())
             ->orderByDesc('recorded_at')
             ->get()
             ->unique('city_id')
             ->values();
-
-        $cities = \App\Models\City::whereIn('id', $latest->pluck('city_id'))->get()->keyBy('id');
 
         $rows = $latest->map(function (MarketPrice $mp) use ($cities, $commodity) {
             $city = $cities[$mp->city_id] ?? null;
