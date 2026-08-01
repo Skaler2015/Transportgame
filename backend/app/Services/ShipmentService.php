@@ -148,6 +148,16 @@ class ShipmentService
             $departedAt = now();
             $etaAt = $departedAt->copy()->addSeconds((int) max(20, round($travelSeconds)));
 
+            // Give the job a fresh deadline measured from DEPARTURE, not from
+            // when the contract was minted. Contracts linger on the market for
+            // minutes before dispatch; a mint-time deadline was often already in
+            // the past, so a truck was flagged LATE the instant it rolled out.
+            // The window is the ideal (good-conditions) travel time × slack, so a
+            // normal run makes it while bad weather/traffic/rough roads risk late.
+            $idealTravelSeconds = $distance / config('transoria.shipment.km_per_minute', 225) * 60;
+            $deadlineSlack = (float) config('transoria.contracts.deadline_slack', 1.6);
+            $deadlineAt = $departedAt->copy()->addSeconds((int) max(45, round($idealTravelSeconds * $deadlineSlack)));
+
             $shipment = Shipment::create([
                 'company_id' => $company->id,
                 'contract_id' => $contract->id,
@@ -178,7 +188,7 @@ class ShipmentService
                 $trailer->update(['status' => Trailer::STATUS_EN_ROUTE]);
             }
             $driver->update(['status' => Driver::STATUS_DRIVING]);
-            $contract->update(['status' => Contract::STATUS_IN_PROGRESS]);
+            $contract->update(['status' => Contract::STATUS_IN_PROGRESS, 'deadline_at' => $deadlineAt]);
 
             return $shipment;
         });
