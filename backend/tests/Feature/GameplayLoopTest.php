@@ -460,6 +460,23 @@ class GameplayLoopTest extends TestCase
         $this->assertSame(3, (int) $third->fleet_no);
     }
 
+    public function test_accounts_analytics_returns_trends_kpis_and_splits(): void
+    {
+        $token = $this->postJson('/api/register', [
+            'name' => 'Analyst', 'email' => 'analyst@transoria.io',
+            'password' => 'password123', 'company_name' => 'Analyst Freight',
+        ])->json('token');
+
+        // Empty-history smoke test — every section present, no SQL blow-ups.
+        $resp = $this->withToken($token)->getJson('/api/accounts/analytics?period=30d');
+        $resp->assertOk()
+            ->assertJsonStructure([
+                'period', 'trend', 'expense_breakdown', 'by_commodity',
+                'top_routes', 'per_vehicle', 'per_driver',
+                'kpis' => ['profit_margin', 'cost_per_km', 'revenue_per_truck', 'on_time_pct'],
+            ]);
+    }
+
     public function test_cannot_dispatch_cargo_that_exceeds_vehicle_capacity(): void
     {
         $user = User::factory()->create();

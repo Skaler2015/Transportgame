@@ -64,6 +64,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Automated accounting: P&L, balance sheet, transaction journal.
     Route::get('/accounts', [AccountsController::class, 'summary']);
+    Route::get('/accounts/analytics', [AccountsController::class, 'analytics']);
     Route::get('/accounts/ledger', [AccountsController::class, 'ledger']);
 
     Route::get('/contracts', [ContractController::class, 'index']);
