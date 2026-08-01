@@ -182,6 +182,7 @@ export interface Contract {
   total_weight?: number
   total_volume?: number
   at_fleet_city?: boolean
+  fleet_arriving?: boolean
 }
 
 export interface Shipment {

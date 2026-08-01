@@ -248,7 +248,7 @@ onUnmounted(() => clearInterval(poll))
       </label>
       <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none"
         :class="hqCityId ? '' : 'ml-auto'"
-        title="Jobs that start in a city where one of your trucks is already parked — no empty run back.">
+        title="Jobs starting in a city where one of your trucks is parked — or heading right now — so it never runs back empty.">
         <input type="checkbox" v-model="backhaulOnly" class="accent-brand h-4 w-4" @change="load()" />
         🚚 Backhaul from my trucks
       </label>
@@ -266,7 +266,10 @@ onUnmounted(() => clearInterval(poll))
         <div class="flex items-start justify-between gap-2">
           <CommodityBadge :commodity="c.commodity" size="md" />
           <div class="flex items-center gap-2">
-            <span v-if="c.at_fleet_city" class="chip bg-brand/20 text-brand-soft" title="A truck of yours is already here — pick it up without an empty run back.">🚚 Truck here</span>
+            <span v-if="c.at_fleet_city" class="chip bg-brand/20 text-brand-soft"
+              :title="c.fleet_arriving ? 'A truck of yours is en route to this city — line up its next load.' : 'A truck of yours is already here — pick it up without an empty run back.'">
+              🚚 {{ c.fleet_arriving ? 'Truck arriving' : 'Truck here' }}
+            </span>
             <span v-if="c.is_rush" class="chip bg-loss/20 text-loss">RUSH</span>
             <DifficultyStars :value="c.difficulty" />
           </div>

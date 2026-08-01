@@ -250,6 +250,50 @@ class GameplayLoopTest extends TestCase
         }
     }
 
+    public function test_contract_market_flags_jobs_at_a_trucks_en_route_destination(): void
+    {
+        // As a truck drives to a city, the market should already surface (and
+        // top-float) the next load leaving that city, flagged "arriving".
+        $token = $this->postJson('/api/register', [
+            'name' => 'Router', 'email' => 'router@transoria.io',
+            'password' => 'password123', 'company_name' => 'Router Freight',
+        ])->json('token');
+
+        $user = User::where('email', 'router@transoria.io')->first();
+        $company = $user->company;
+        $companyService = app(CompanyService::class);
+        $shipmentService = app(ShipmentService::class);
+
+        $vehicle = $company->vehicles()->with('model')->first();
+        $driver = $company->drivers()->first();
+
+        $contract = null;
+        for ($i = 0; $i < 8 && ! $contract; $i++) {
+            $this->artisan('world:tick');
+            $contract = Contract::onMarket()
+                ->where('origin_city_id', $company->headquarters_city_id)
+                ->with('commodity')->get()
+                ->first(fn (Contract $c) => $this->fits($c, $vehicle));
+        }
+        $this->assertNotNull($contract);
+
+        $companyService->acceptContract($company, $contract);
+        $shipmentService->dispatch($company, $contract, $vehicle, $driver);
+        $destId = $contract->destination_city_id;
+
+        // Point an open job's origin at that destination so there's one to flag.
+        $open = Contract::onMarket()->where('origin_city_id', '!=', $destId)->first();
+        $this->assertNotNull($open);
+        $open->update(['origin_city_id' => $destId]);
+
+        $rows = $this->withToken($token)->getJson('/api/contracts?haulable=0')->json('data');
+        $flagged = collect($rows)->firstWhere('id', $open->id);
+
+        $this->assertNotNull($flagged, 'The repointed job should appear on the board.');
+        $this->assertTrue($flagged['at_fleet_city'], 'A job at the truck\'s destination should be flagged.');
+        $this->assertTrue($flagged['fleet_arriving'], 'It should read as arriving (truck still en route).');
+    }
+
     public function test_cannot_dispatch_cargo_that_exceeds_vehicle_capacity(): void
     {
         $user = User::factory()->create();

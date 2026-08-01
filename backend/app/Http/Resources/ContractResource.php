@@ -30,6 +30,8 @@ class ContractResource extends JsonResource
             // True when a truck of ours is already parked at this job's origin —
             // a backhaul it can pick up without deadheading back empty.
             'at_fleet_city' => (bool) ($this->at_fleet_city ?? false),
+            // True when that truck isn't there yet but is EN ROUTE to this origin.
+            'fleet_arriving' => (bool) ($this->fleet_arriving ?? false),
         ];
     }
 }

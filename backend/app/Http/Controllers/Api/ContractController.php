@@ -8,6 +8,7 @@ use App\Http\Resources\ContractResource;
 use App\Http\Resources\ShipmentResource;
 use App\Models\Contract;
 use App\Models\Driver;
+use App\Models\Shipment;
 use App\Models\Trailer;
 use App\Models\Vehicle;
 use App\Models\WorldEvent;
@@ -64,14 +65,28 @@ class ContractController extends Controller
             $query->reorder()->orderBy($sort);
         }
 
-        // The idle fleet: used both for the "haulable" filter and to surface
-        // BACKHAUL jobs — contracts that start in a city where a truck already
-        // sits, so it can pick up a load instead of driving back empty.
-        $fleet = Vehicle::where('company_id', $company->id)
+        // The fleet used for the "haulable" filter and for BACKHAUL jobs — work
+        // starting where a truck already is, so it doesn't run back empty. We
+        // count BOTH idle trucks (available now) AND trucks currently EN ROUTE,
+        // using their delivery destination — so as a truck drives to Indore, the
+        // board already surfaces the next Indore-origin load it can pick up.
+        $idleFleet = Vehicle::where('company_id', $company->id)
             ->where('status', Vehicle::STATUS_IDLE)
             ->where('condition', '>', 15)
             ->with('model')->get();
-        $fleetCityIds = $fleet->pluck('city_id')->filter()->unique()->flip();
+
+        $inbound = Shipment::where('company_id', $company->id)
+            ->where('status', Shipment::STATUS_EN_ROUTE)
+            ->with(['vehicle.model', 'contract:id,destination_city_id'])
+            ->get();
+
+        // Cities where a truck is, or will soon be.
+        $idleCityIds = $idleFleet->pluck('city_id')->filter()->unique()->flip();
+        $arrivingCityIds = $inbound->pluck('contract.destination_city_id')->filter()->unique()->flip();
+        $fleetCityIds = $idleCityIds->keys()->merge($arrivingCityIds->keys())->unique()->flip();
+
+        // Trucks that can take fresh work now or once they arrive.
+        $haulFleet = $idleFleet->merge($inbound->pluck('vehicle')->filter())->values();
 
         $wantHaulable = filter_var($filters['haulable'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $wantBackhaul = filter_var($filters['backhaul'] ?? false, FILTER_VALIDATE_BOOLEAN);
@@ -79,12 +94,13 @@ class ContractController extends Controller
         $contracts = $query->limit(300)->get();
 
         if ($wantHaulable) {
-            $contracts = $contracts->filter(fn (Contract $c) => $this->haulableBy($c, $fleet));
+            $contracts = $contracts->filter(fn (Contract $c) => $this->haulableBy($c, $haulFleet));
         }
 
-        // Flag each job that starts where one of our trucks is parked.
-        $contracts->each(function (Contract $c) use ($fleetCityIds) {
+        // Flag jobs starting where a truck is (idle) or is heading (arriving).
+        $contracts->each(function (Contract $c) use ($fleetCityIds, $idleCityIds) {
             $c->at_fleet_city = $fleetCityIds->has($c->origin_city_id);
+            $c->fleet_arriving = ! $idleCityIds->has($c->origin_city_id) && $fleetCityIds->has($c->origin_city_id);
         });
 
         if ($wantBackhaul) {
