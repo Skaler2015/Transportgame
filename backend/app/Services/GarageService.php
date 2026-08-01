@@ -54,6 +54,60 @@ class GarageService
     public const SERVICES = ['oil', 'battery', 'insurance', 'registration'];
 
     /**
+     * One-click full service: repair condition + tyres, restore oil + battery,
+     * and fill the fuel tank — all charged in a single combined bill.
+     *
+     * @return array{vehicle: Vehicle, message: string, cost: int}
+     */
+    public function fullService(Company $company, Vehicle $vehicle): array
+    {
+        if ($vehicle->company_id !== $company->id) {
+            throw new RuntimeException('That vehicle is not yours.');
+        }
+        if ($vehicle->status === Vehicle::STATUS_EN_ROUTE) {
+            throw new RuntimeException('Cannot service a vehicle that is on the road.');
+        }
+
+        $vehicle->loadMissing('model', 'city');
+        $cfg = config('transoria.garage');
+
+        $repairCost = (int) round((100 - $vehicle->condition) * $cfg['repair_cost_per_point']
+            + $vehicle->tire_wear * $cfg['tire_cost_per_point']);
+        $oilCost = $vehicle->oil_level < 100 ? (int) $cfg['oil_change_cost'] : 0;
+        $battCost = $vehicle->battery < 100 ? (int) $cfg['battery_cost'] : 0;
+
+        $capacity = (float) ($vehicle->model->fuel_capacity ?? 0);
+        $room = max(0, $capacity - $vehicle->fuel);
+        $pricePerLitre = $vehicle->city->fuel_price ?? $company->headquarters?->fuel_price ?? 1.0;
+        $fuelCost = (int) round($room * $pricePerLitre * 100);
+
+        $total = $repairCost + $oilCost + $battCost + $fuelCost;
+        if ($total <= 0) {
+            throw new RuntimeException('This vehicle is already serviced and fuelled.');
+        }
+        if ($company->cash < $total) {
+            throw new RuntimeException('Not enough cash for a full service.');
+        }
+
+        $this->ledger->post($company, LedgerEntry::CAT_UPKEEP,
+            "Full service & refuel: {$vehicle->model->name}", -$total, $vehicle);
+
+        $vehicle->condition = 100;
+        $vehicle->tire_wear = 0;
+        $vehicle->oil_level = 100;
+        $vehicle->battery = 100;
+        if ($capacity > 0) {
+            $vehicle->fuel = $capacity;
+        }
+        if ($vehicle->status === Vehicle::STATUS_MAINTENANCE) {
+            $vehicle->status = Vehicle::STATUS_IDLE;
+        }
+        $vehicle->save();
+
+        return ['vehicle' => $vehicle, 'message' => 'Fully serviced & fuelled.', 'cost' => $total];
+    }
+
+    /**
      * Perform a service-centre job: oil change, battery replacement, or renewing
      * insurance / registration papers. Returns the vehicle and a message.
      *

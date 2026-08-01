@@ -73,6 +73,15 @@ async function refuel(v: Vehicle) {
   } catch (e) { toast.error(apiError(e)) } finally { working.value = null }
 }
 
+async function fullService(v: Vehicle) {
+  working.value = v.id
+  try {
+    const { data } = await api.post(`/vehicles/${v.id}/full-service`)
+    toast.success(data.message)
+    await load(); game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)) } finally { working.value = null }
+}
+
 async function service(v: Vehicle, type: 'oil' | 'battery' | 'insurance' | 'registration') {
   working.value = v.id
   try {
@@ -217,10 +226,13 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
         <div class="mt-3 pt-3 border-t border-white/5">
           <div class="flex items-center justify-between mb-2 gap-2">
             <span class="stat-label">Upgrades ({{ (v as any).upgrade_slots_used ?? 0 }}/{{ v.model?.upgrade_slots ?? 0 }})</span>
-            <div class="flex gap-1.5">
-              <button v-if="(v.fuel_capacity ?? 0) > 0" class="btn-ghost !py-1 !px-2 text-[11px]" :disabled="working === v.id || v.status === 'en_route'" @click="refuel(v)">⛽ Refuel</button>
-              <button class="btn-ghost !py-1 !px-2 text-[11px]" :disabled="working === v.id || v.status === 'en_route'" @click="repair(v)">🔧 Service</button>
-            </div>
+            <button class="btn-primary !py-1 !px-3 text-[11px]" :disabled="working === v.id || v.status === 'en_route'" @click="fullService(v)">
+              ⚡ Full Service
+            </button>
+          </div>
+          <div class="flex gap-1.5 mb-2">
+            <button v-if="(v.fuel_capacity ?? 0) > 0" class="btn-ghost !py-1 !px-2 text-[11px] flex-1" :disabled="working === v.id || v.status === 'en_route'" @click="refuel(v)">⛽ Refuel</button>
+            <button class="btn-ghost !py-1 !px-2 text-[11px] flex-1" :disabled="working === v.id || v.status === 'en_route'" @click="repair(v)">🔧 Repair</button>
           </div>
           <!-- Service centre -->
           <div class="grid grid-cols-4 gap-1.5 mb-2">

@@ -43,6 +43,19 @@ class GarageController extends Controller
         return response()->json(['message' => ucfirst($data['kind']).' upgraded.']);
     }
 
+    /** One click: repair + oil + battery + full refuel. */
+    public function fullService(Request $request, Vehicle $vehicle)
+    {
+        $company = $this->company($request);
+        try {
+            $result = $this->garage->fullService($company, $vehicle);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['message' => $result['message']]);
+    }
+
     /** Service-centre jobs: oil change, battery, insurance, registration. */
     public function service(Request $request, Vehicle $vehicle)
     {

@@ -394,6 +394,28 @@ class GameplayLoopTest extends TestCase
         $this->assertTrue($vehicle->fresh()->isInsured(), 'Renewal restores insurance.');
     }
 
+    public function test_full_service_repairs_refuels_and_restores_in_one_call(): void
+    {
+        $user = User::factory()->create();
+        $company = app(CompanyService::class)->found($user, 'OneClick Co');
+        $garage = app(\App\Services\GarageService::class);
+
+        $vehicle = $company->vehicles()->with('model')->first();
+        $vehicle->update([
+            'condition' => 40, 'tire_wear' => 60, 'oil_level' => 20,
+            'battery' => 30, 'fuel' => 10,
+        ]);
+
+        $garage->fullService($company->fresh(), $vehicle->fresh());
+
+        $v = $vehicle->fresh();
+        $this->assertSame(100.0, (float) $v->condition);
+        $this->assertSame(0.0, (float) $v->tire_wear);
+        $this->assertSame(100.0, (float) $v->oil_level);
+        $this->assertSame(100.0, (float) $v->battery);
+        $this->assertEqualsWithDelta((float) $v->model->fuel_capacity, (float) $v->fuel, 0.01);
+    }
+
     public function test_reset_wipes_progress_and_reissues_the_starter_loadout(): void
     {
         $user = User::factory()->create();
