@@ -20,7 +20,7 @@ const drivers = ref<Driver[]>([])
 const loading = ref(false)
 const accepting = ref<number | null>(null)
 const dispatching = ref<number | null>(null)
-const filters = ref({ origin_city_id: '', commodity_id: '', sort: 'payout' })
+const filters = ref({ origin_city_id: '', commodity_id: '', sort: 'distance_km' })
 const haulableOnly = ref(true)
 // On by default: show jobs starting where your trucks are (parked or arriving),
 // so a free truck always sees local work first. Untick to see the whole market.
@@ -162,13 +162,23 @@ function toggleContract(id: number) {
 }
 
 type CSortKey = 'cargo' | 'from' | 'to' | 'status' | 'dist' | 'load' | 'eta' | 'value' | 'profit' | 'diff'
-const cSort = ref<{ k: CSortKey; dir: 'asc' | 'desc' } | null>(null)
+// Default: shortest ETA on top.
+const cSort = ref<{ k: CSortKey; dir: 'asc' | 'desc' }>({ k: 'eta', dir: 'asc' })
 function clickSort(k: CSortKey) {
-  if (cSort.value?.k === k) cSort.value = { k, dir: cSort.value.dir === 'asc' ? 'desc' : 'asc' }
+  if (cSort.value.k === k) cSort.value = { k, dir: cSort.value.dir === 'asc' ? 'desc' : 'asc' }
   else cSort.value = { k, dir: ['from', 'to', 'cargo'].includes(k) ? 'asc' : 'desc' }
 }
 function sortMark(k: CSortKey): string {
-  return cSort.value?.k === k ? (cSort.value.dir === 'asc' ? ' ▲' : ' ▼') : ''
+  return cSort.value.k === k ? (cSort.value.dir === 'asc' ? ' ▲' : ' ▼') : ''
+}
+// The top "Sort by" dropdown drives the same client sort.
+const dropdownSort = ref<CSortKey>('eta')
+function applyDropdownSort() {
+  const k = dropdownSort.value
+  cSort.value = { k, dir: (k === 'value' || k === 'profit') ? 'desc' : 'asc' }
+  // Fetch the matching slice from the server, then client-sort it.
+  filters.value.sort = (k === 'value' || k === 'profit') ? 'payout' : k === 'diff' ? 'difficulty' : 'distance_km'
+  load()
 }
 function cVal(c: Contract, k: CSortKey): number | string {
   switch (k) {
@@ -183,9 +193,8 @@ function cVal(c: Contract, k: CSortKey): number | string {
     default: return c.difficulty ?? 0
   }
 }
-// Server order (backhaul-floated) by default; a header click sorts client-side.
+// Always client-sorted (default: shortest ETA first); header/dropdown change it.
 const sortedContracts = computed(() => {
-  if (!cSort.value) return contracts.value
   const { k, dir } = cSort.value
   return [...contracts.value].sort((a, b) => {
     const av = cVal(a, k), bv = cVal(b, k)
@@ -369,11 +378,11 @@ onUnmounted(() => clearInterval(poll))
       </div>
       <div class="min-w-[140px]">
         <label class="stat-label">Sort by</label>
-        <select v-model="filters.sort" class="input mt-1" @change="load()">
-          <option value="payout">Highest payout</option>
-          <option value="distance_km">Shortest distance</option>
-          <option value="difficulty">Easiest</option>
-          <option value="deadline_at">Deadline soonest</option>
+        <select v-model="dropdownSort" class="input mt-1" @change="applyDropdownSort">
+          <option value="eta">Soonest ETA</option>
+          <option value="value">Highest payout</option>
+          <option value="profit">Best profit</option>
+          <option value="diff">Easiest</option>
         </select>
       </div>
       <button class="btn-ghost" @click="load()">↻ Refresh</button>
