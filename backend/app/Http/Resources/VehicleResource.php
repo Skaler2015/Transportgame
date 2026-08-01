@@ -35,8 +35,25 @@ class VehicleResource extends JsonResource
             'trailer_level' => (int) $this->trailer_level,
             'upgrade_slots_used' => (int) ($this->engine_level + $this->tires_level + $this->trailer_level),
             'effective_capacity_weight' => $this->whenLoaded('model', fn () => $this->effectiveCapacityWeight()),
+            // Per-service cost (₡ cents) so the UI can show the price on each fix.
+            'service_costs' => $this->serviceCosts(),
             'model' => new VehicleModelResource($this->whenLoaded('model')),
             'city' => new CityResource($this->whenLoaded('city')),
+        ];
+    }
+
+    /** What each one-click fix would cost this vehicle right now, in cents. */
+    private function serviceCosts(): array
+    {
+        $cfg = config('transoria.garage');
+
+        return [
+            'repair' => (int) round((100 - $this->condition) * $cfg['repair_cost_per_point']
+                + $this->tire_wear * $cfg['tire_cost_per_point']),
+            'oil' => (int) $cfg['oil_change_cost'],
+            'battery' => (int) $cfg['battery_cost'],
+            'insurance' => (int) $cfg['insurance_cost'],
+            'registration' => (int) $cfg['registration_cost'],
         ];
     }
 }

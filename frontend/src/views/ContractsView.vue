@@ -149,6 +149,10 @@ function vehicleNeeds(v: Vehicle): string[] {
   ].filter(Boolean)
 }
 const NEED_ICON: Record<string, string> = { repair: '🔧', oil: '🛢', battery: '🔋', insurance: '🛡', registration: '📋' }
+// What a given fix costs this vehicle right now (₡ cents), for the chip label.
+function needCost(v: Vehicle, need: string): number {
+  return v.service_costs?.[need as keyof NonNullable<Vehicle['service_costs']>] ?? 0
+}
 // Free vehicles that need any service — for the mobile alert banner, which
 // expands inline so a truck can be serviced right there (no scrolling away).
 const vehiclesNeedingFix = computed(() => freeVehicles.value.filter((v) => vehicleNeeds(v).length > 0))
@@ -589,7 +593,7 @@ onUnmounted(() => clearInterval(poll))
             <button v-for="need in vehicleNeeds(v)" :key="need"
               class="chip bg-gold/15 text-gold hover:bg-gold/25 text-[10px] capitalize disabled:opacity-40"
               :disabled="servingVeh === v.id" @click="fixNeed(v, need)">
-              {{ NEED_ICON[need] }} {{ servingVeh === v.id ? '…' : need }}
+              {{ NEED_ICON[need] }} {{ servingVeh === v.id ? '…' : need }}<span v-if="needCost(v, need)" class="font-mono ml-1 normal-case">{{ credits(needCost(v, need)) }}</span>
             </button>
           </div>
         </div>
@@ -863,7 +867,7 @@ onUnmounted(() => clearInterval(poll))
              <button v-for="need in vehicleNeeds(v)" :key="need"
                class="chip bg-gold/15 text-gold hover:bg-gold/25 text-[10px] capitalize disabled:opacity-40"
                :disabled="servingVeh === v.id" @click="fixNeed(v, need)">
-               {{ NEED_ICON[need] }} {{ need }}
+               {{ NEED_ICON[need] }} {{ need }}<span v-if="needCost(v, need)" class="font-mono ml-1 normal-case">{{ credits(needCost(v, need)) }}</span>
              </button>
            </div>
          </div>
@@ -887,7 +891,7 @@ onUnmounted(() => clearInterval(poll))
              <button
                class="chip bg-gold/15 text-gold hover:bg-gold/25 text-[10px] disabled:opacity-40"
                :disabled="servingTrailer === t.id" @click="fixTrailer(t)">
-               🔧 {{ servingTrailer === t.id ? 'Repairing…' : 'Repair' }}
+               🔧 {{ servingTrailer === t.id ? 'Repairing…' : 'Repair' }}<span v-if="t.repair_cost" class="font-mono ml-1">{{ credits(t.repair_cost) }}</span>
              </button>
            </div>
          </div>

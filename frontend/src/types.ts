@@ -111,6 +111,7 @@ export interface Vehicle {
   fuel_pct?: number
   odometer: number
   available: boolean
+  service_costs?: { repair: number; oil: number; battery: number; insurance: number; registration: number }
   model?: VehicleModel
   city?: City
 }
@@ -137,6 +138,7 @@ export interface Trailer {
   status: string
   condition: number
   available: boolean
+  repair_cost?: number
   model?: TrailerModel
   city?: City
 }
