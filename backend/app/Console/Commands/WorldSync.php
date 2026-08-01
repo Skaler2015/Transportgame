@@ -109,6 +109,25 @@ class WorldSync extends Command
             ->update(['onboarded_at' => now()]);
         $this->info("Marked {$onboarded} established companies as onboarded.");
 
+        // 6. Backfill deeper city economics deterministically (stable per city).
+        $enriched = 0;
+        foreach (City::whereNull('road_quality')->get() as $city) {
+            $h = crc32($city->name);
+            $bit = fn (int $shift) => (($h >> $shift) & 0xFF) / 255.0; // stable 0..1
+            $popM = $city->population / 1_000_000;
+            // "Development" score from infrastructure + size.
+            $dev = min(1.0, ($city->has_airport ? 0.4 : 0) + ($city->has_port ? 0.3 : 0) + min(0.3, $popM * 0.03));
+
+            $city->gdp_per_capita = (int) round(150_000 + $dev * 400_000 + $bit(0) * 150_000);
+            $city->road_quality = (int) min(98, round(45 + $dev * 45 + $bit(8) * 10));
+            $city->crime_index = (int) max(5, min(90, round(15 + (1 - $dev) * 40 + $bit(16) * 15)));
+            $city->toll_per_km = round(0.30 + $dev * 1.00 + $bit(24) * 0.30, 2);
+            $city->industrial_growth = round(-0.010 + $bit(4) * 0.080, 3);
+            $city->save();
+            $enriched++;
+        }
+        $this->info("Enriched {$enriched} cities with economic attributes.");
+
         $this->info('World sync complete.');
 
         return self::SUCCESS;

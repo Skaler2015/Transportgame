@@ -53,7 +53,9 @@ function drawCities() {
       fillOpacity: 0.35,
     })
       .bindTooltip(
-        `<b>${c.name}</b><br>${c.region} · pop ${(c.population / 1e6).toFixed(1)}M<br>${WEATHER_ICON[c.weather] || ''} fuel ${cur()}${c.fuel_price}`,
+        `<b>${c.name}</b><br>${c.region} · pop ${(c.population / 1e6).toFixed(1)}M<br>` +
+          `${WEATHER_ICON[c.weather] || ''} fuel ${cur()}${c.fuel_price}` +
+          (c.road_quality != null ? `<br>🛣️ road ${c.road_quality} · 🚔 crime ${c.crime_index} · toll ${cur()}${c.toll_per_km}/km` : ''),
         { direction: 'top' },
       )
       .addTo(map.value)

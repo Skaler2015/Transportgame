@@ -20,6 +20,7 @@ interface Market { city_id: number; city: string; region: string; price: number;
 const markets = ref<Market[]>([])
 const commodityId = ref<number | null>(null)
 const basePrice = ref(0)
+const season = ref<{ name: string; demand: Record<string, number> } | null>(null)
 const historyCity = ref<number | null>(null)
 const series = ref<{ price: number; at: string }[]>([])
 
@@ -33,6 +34,7 @@ async function loadMarket() {
     const { data } = await api.get('/market', { params: { commodity_id: commodityId.value, country: auth.company?.country } })
     markets.value = data.markets
     basePrice.value = data.commodity.base_price
+    season.value = data.season ?? null
     historyCity.value = bestSell.value?.city_id ?? markets.value[0]?.city_id ?? null
     await loadHistory()
   } catch (e) {
@@ -90,6 +92,19 @@ onMounted(async () => {
       <select v-model="commodityId" class="input max-w-xs" @change="loadMarket">
         <option v-for="k in game.commodities" :key="k.id" :value="k.id">{{ k.name }}</option>
       </select>
+    </div>
+
+    <!-- Seasonal demand banner -->
+    <div v-if="season" class="glass p-3 flex items-center gap-3 border-l-2 border-gold/50">
+      <span class="text-xl">🗓️</span>
+      <div class="text-sm">
+        <span class="font-semibold text-gold">{{ season.name }}</span>
+        <span class="text-slate-400"> — demand shift: </span>
+        <span v-for="(mult, cat) in season.demand" :key="cat" class="mr-2 text-[12px]">
+          <span class="capitalize">{{ cat }}</span>
+          <span :class="mult >= 1 ? 'text-gain' : 'text-loss'"> {{ mult >= 1 ? '+' : '' }}{{ Math.round((mult - 1) * 100) }}%</span>
+        </span>
+      </div>
     </div>
 
     <div class="grid lg:grid-cols-3 gap-4">

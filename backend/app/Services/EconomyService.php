@@ -37,6 +37,14 @@ class EconomyService
         // Squash into a sane band before elasticity is applied.
         $demandIndex = max(0.35, min(2.4, $raw));
 
+        // Seasonal swing: the calendar shifts whole-category demand.
+        $demandIndex *= $this->seasonalDemand($commodity->category);
+
+        // Richer, faster-growing cities consume a little more eagerly.
+        if ($city->gdp_per_capita) {
+            $demandIndex *= 1 + min(0.15, max(-0.05, ($city->gdp_per_capita - 300_000) / 3_000_000));
+        }
+
         // Apply demand modifiers from events scoped to this city/commodity/region.
         foreach ($events as $event) {
             if ($this->eventApplies($event, $city, $commodity)) {
@@ -60,6 +68,27 @@ class EconomyService
             'price' => round($price, 2),
             'demand_index' => round($demandIndex, 3),
         ];
+    }
+
+    /** Demand multiplier for a commodity category in the current season. */
+    public function seasonalDemand(string $category): float
+    {
+        $season = $this->currentSeason();
+
+        return $season ? (float) ($season['demand'][$category] ?? 1.0) : 1.0;
+    }
+
+    /** The active season definition for the current month, or null. */
+    public function currentSeason(): ?array
+    {
+        $month = (int) now()->month;
+        foreach (config('transoria.seasons', []) as $season) {
+            if (in_array($month, $season['months'] ?? [], true)) {
+                return $season;
+            }
+        }
+
+        return null;
     }
 
     /** Does an event's scope cover this city/commodity? Null scopes are global. */

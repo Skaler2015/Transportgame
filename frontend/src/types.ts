@@ -8,6 +8,11 @@ export interface City {
   lat: number
   lng: number
   population: number
+  gdp_per_capita?: number | null
+  crime_index?: number | null
+  road_quality?: number | null
+  toll_per_km?: number | null
+  industrial_growth?: number | null
   traffic: number
   tax_rate: number
   fuel_price: number

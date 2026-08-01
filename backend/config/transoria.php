@@ -14,7 +14,7 @@ return [
     // deploy the app notices the stored marker no longer matches and runs
     // `migrate --force` + `transoria:worldsync` once, so shared hosts that
     // never run the CLI still stay fully migrated. See EnsureSchemaUpToDate.
-    'schema_version' => '2026.08.03-news',
+    'schema_version' => '2026.08.04-city-econ',
 
     // In-game currency label.
     'currency' => ['code' => 'CR', 'symbol' => '₡', 'name' => 'Credits'],
@@ -63,6 +63,17 @@ return [
         'price_ceiling_pct' => 2.6,   // never above 260% of base
         'demand_smoothing' => 0.35,   // EMA factor for demand index
         'fuel_drift' => 0.04,         // max fractional fuel-price wander per tick
+    ],
+
+    // Seasonal demand. The current calendar month shifts demand for whole
+    // commodity categories, so prices breathe with the year (Diwali, monsoon,
+    // winter holidays…). Multipliers apply to the demand index before pricing.
+    'seasons' => [
+        ['name' => 'Festival Season', 'months' => [10, 11], 'demand' => ['luxury' => 1.35, 'food' => 1.20, 'tech' => 1.25, 'livestock' => 1.15]],
+        ['name' => 'Winter Holidays', 'months' => [12, 1], 'demand' => ['luxury' => 1.25, 'food' => 1.15, 'tech' => 1.20]],
+        ['name' => 'Spring Build', 'months' => [2, 3], 'demand' => ['industrial' => 1.12, 'raw' => 1.08]],
+        ['name' => 'Summer Peak', 'months' => [4, 5], 'demand' => ['food' => 1.12, 'industrial' => 1.05]],
+        ['name' => 'Monsoon', 'months' => [6, 7, 8, 9], 'demand' => ['food' => 1.15, 'industrial' => 0.90, 'raw' => 0.92]],
     ],
 
     // Contract market generation.

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Commodity;
 use App\Models\MarketPrice;
+use App\Services\EconomyService;
 use Illuminate\Http\Request;
 
 class MarketController extends Controller
@@ -49,6 +50,8 @@ class MarketController extends Controller
             ];
         })->sortByDesc('price')->values();
 
+        $season = app(EconomyService::class)->currentSeason();
+
         return response()->json([
             'commodity' => [
                 'id' => $commodity->id,
@@ -56,6 +59,10 @@ class MarketController extends Controller
                 'base_price' => (float) $commodity->base_price,
             ],
             'markets' => $rows,
+            'season' => $season ? [
+                'name' => $season['name'],
+                'demand' => $season['demand'] ?? [],
+            ] : null,
         ]);
     }
 
