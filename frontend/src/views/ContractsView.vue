@@ -488,16 +488,16 @@ onUnmounted(() => clearInterval(poll))
     </button>
 
     <!-- Mobile: compact On-the-Road summary, right above the contracts.
-         Totals at a glance; tap to expand the full route list. -->
-    <details v-if="onTheRoad.length" class="lg:hidden glass !p-3">
-      <summary class="flex items-center justify-between gap-2 cursor-pointer list-none">
+         Just the four headline numbers — no route list, keeps it tiny. -->
+    <div v-if="onTheRoad.length" class="lg:hidden glass !p-3">
+      <div class="flex items-center justify-between gap-2">
         <span class="text-sm font-semibold">
           On the Road <span class="chip bg-brand/15 text-brand-soft ml-1">{{ onTheRoad.length }}</span>
         </span>
         <span class="font-mono text-xs" :class="roadTotals.profit >= 0 ? 'text-gain' : 'text-loss'">
           {{ credits(roadTotals.profit) }} profit
         </span>
-      </summary>
+      </div>
       <div class="grid grid-cols-2 gap-x-3 gap-y-1 mt-2.5 text-[11px]">
         <div class="flex items-center justify-between">
           <span class="text-slate-400">Value</span>
@@ -512,13 +512,7 @@ onUnmounted(() => clearInterval(poll))
           <span class="font-mono text-brand-soft font-semibold">{{ credits(projectedCash) }}</span>
         </div>
       </div>
-      <div class="divide-y divide-white/5 mt-2 max-h-52 overflow-y-auto">
-        <div v-for="s in onTheRoad" :key="s.id" class="py-1.5 flex items-center justify-between gap-2">
-          <span class="text-[11px] font-medium truncate">{{ s.contract?.origin?.name }} → {{ s.contract?.destination?.name }}</span>
-          <span class="font-mono text-[10px] shrink-0" :class="etaLeft(s) === 'arriving…' ? 'text-gain' : 'text-brand-soft'">⏱ {{ etaLeft(s) }}</span>
-        </div>
-      </div>
-    </details>
+    </div>
 
     <div v-if="loading" class="grid place-items-center h-64 text-slate-500">Loading market…</div>
 
