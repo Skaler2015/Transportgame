@@ -21,6 +21,7 @@ const accepting = ref<number | null>(null)
 const dispatching = ref<number | null>(null)
 const filters = ref({ origin_city_id: '', commodity_id: '', sort: 'payout' })
 const haulableOnly = ref(true)
+const backhaulOnly = ref(false)
 const selection = ref<Record<number, { vehicle_id: number | null; trailer_id: number | null; driver_id: number | null }>>({})
 
 const sortedCities = computed(() => [...game.cities].sort((a, b) => a.name.localeCompare(b.name)))
@@ -43,6 +44,7 @@ async function load(silent = false) {
     if (filters.value.origin_city_id) params.origin_city_id = filters.value.origin_city_id
     if (filters.value.commodity_id) params.commodity_id = filters.value.commodity_id
     if (haulableOnly.value) params.haulable = '1'
+    if (backhaulOnly.value) params.backhaul = '1'
     const { data } = await api.get('/contracts', { params })
     contracts.value = data.data
     for (const c of contracts.value) {
@@ -212,7 +214,12 @@ onUnmounted(() => clearInterval(poll))
         </select>
       </div>
       <button class="btn-ghost" @click="load()">↻ Refresh</button>
-      <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none ml-auto">
+      <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none ml-auto"
+        title="Jobs that start in a city where one of your trucks is already parked — no empty run back.">
+        <input type="checkbox" v-model="backhaulOnly" class="accent-brand h-4 w-4" @change="load()" />
+        🚚 Backhaul from my trucks
+      </label>
+      <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
         <input type="checkbox" v-model="haulableOnly" class="accent-brand h-4 w-4" @change="load()" />
         Only what my fleet can haul
       </label>
@@ -221,10 +228,12 @@ onUnmounted(() => clearInterval(poll))
     <div v-if="loading" class="grid place-items-center h-64 text-slate-500">Loading market…</div>
 
     <div v-else class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-      <div v-for="c in contracts" :key="c.id" class="glass glass-hover p-4 flex flex-col">
+      <div v-for="c in contracts" :key="c.id" class="glass glass-hover p-4 flex flex-col"
+        :class="c.at_fleet_city ? 'ring-1 ring-brand/50' : ''">
         <div class="flex items-start justify-between gap-2">
           <CommodityBadge :commodity="c.commodity" size="md" />
           <div class="flex items-center gap-2">
+            <span v-if="c.at_fleet_city" class="chip bg-brand/20 text-brand-soft" title="A truck of yours is already here — pick it up without an empty run back.">🚚 Truck here</span>
             <span v-if="c.is_rush" class="chip bg-loss/20 text-loss">RUSH</span>
             <DifficultyStars :value="c.difficulty" />
           </div>

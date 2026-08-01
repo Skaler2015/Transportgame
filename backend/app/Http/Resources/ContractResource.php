@@ -27,6 +27,9 @@ class ContractResource extends JsonResource
             'destination' => new CityResource($this->whenLoaded('destination')),
             'total_weight' => $this->whenLoaded('commodity', fn () => round($this->commodity->weight_per_unit * $this->units, 2)),
             'total_volume' => $this->whenLoaded('commodity', fn () => round($this->commodity->volume_per_unit * $this->units, 2)),
+            // True when a truck of ours is already parked at this job's origin —
+            // a backhaul it can pick up without deadheading back empty.
+            'at_fleet_city' => (bool) ($this->at_fleet_city ?? false),
         ];
     }
 }

@@ -143,6 +143,45 @@ class GameplayLoopTest extends TestCase
         $this->assertNotSame(Driver::STATUS_DRIVING, $driver->fresh()->status);
     }
 
+    public function test_delivery_that_arrived_before_deadline_is_not_marked_late_when_resolved_late(): void
+    {
+        // Resolution is lazy (no cron): a shipment settles whenever the player
+        // next loads a page after the ETA passes — possibly long after. Lateness
+        // must be judged by the scheduled arrival (eta_at) vs the deadline, NOT
+        // the wall-clock resolution moment, or an away player is wrongly penalised.
+        $user = User::factory()->create();
+        $companyService = app(CompanyService::class);
+        $shipmentService = app(ShipmentService::class);
+
+        $company = $companyService->found($user, 'Punctual Co');
+        $vehicle = $company->vehicles()->with('model')->first();
+        $driver = $company->drivers()->first();
+
+        $contract = null;
+        for ($i = 0; $i < 8 && ! $contract; $i++) {
+            $this->artisan('world:tick');
+            $contract = Contract::onMarket()
+                ->where('origin_city_id', $company->headquarters_city_id)
+                ->with('commodity')->get()
+                ->first(fn (Contract $c) => $this->fits($c, $vehicle));
+        }
+        $this->assertNotNull($contract);
+
+        $companyService->acceptContract($company, $contract);
+        $shipment = $shipmentService->dispatch($company, $contract, $vehicle, $driver);
+
+        // Truck arrived 5 min ago (before a deadline 2 min ago); we only resolve
+        // it now — well after both, simulating a player who stepped away.
+        $shipment->update([
+            'eta_at' => now()->subMinutes(5),
+            'deadline_at' => now()->subMinutes(2),
+        ]);
+        $shipmentService->resolve($shipment->fresh());
+
+        // An accident may still fail it, but it must never be LATE: it arrived on time.
+        $this->assertNotSame(Shipment::STATUS_LATE, $shipment->fresh()->status);
+    }
+
     public function test_cannot_dispatch_cargo_that_exceeds_vehicle_capacity(): void
     {
         $user = User::factory()->create();

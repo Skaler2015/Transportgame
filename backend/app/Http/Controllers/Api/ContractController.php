@@ -39,6 +39,7 @@ class ContractController extends Controller
             'commodity_id' => ['nullable', 'integer', 'exists:commodities,id'],
             'sort' => ['nullable', 'in:payout,distance_km,difficulty,deadline_at'],
             'haulable' => ['nullable', 'boolean'],
+            'backhaul' => ['nullable', 'boolean'],
         ]);
 
         $company = $this->company($request);
@@ -63,23 +64,38 @@ class ContractController extends Controller
             $query->reorder()->orderBy($sort);
         }
 
-        // When requested, keep only contracts at least one AVAILABLE, compatible
-        // vehicle in the player's fleet could actually haul.
-        if (filter_var($filters['haulable'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
-            $company = $this->company($request);
-            $fleet = Vehicle::where('company_id', $company->id)
-                ->where('status', Vehicle::STATUS_IDLE)
-                ->where('condition', '>', 15)
-                ->with('model')->get();
+        // The idle fleet: used both for the "haulable" filter and to surface
+        // BACKHAUL jobs — contracts that start in a city where a truck already
+        // sits, so it can pick up a load instead of driving back empty.
+        $fleet = Vehicle::where('company_id', $company->id)
+            ->where('status', Vehicle::STATUS_IDLE)
+            ->where('condition', '>', 15)
+            ->with('model')->get();
+        $fleetCityIds = $fleet->pluck('city_id')->filter()->unique()->flip();
 
-            $contracts = $query->limit(300)->get()
-                ->filter(fn (Contract $c) => $this->haulableBy($c, $fleet))
-                ->take(60)->values();
+        $wantHaulable = filter_var($filters['haulable'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $wantBackhaul = filter_var($filters['backhaul'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
-            return ContractResource::collection($contracts);
+        $contracts = $query->limit(300)->get();
+
+        if ($wantHaulable) {
+            $contracts = $contracts->filter(fn (Contract $c) => $this->haulableBy($c, $fleet));
         }
 
-        return ContractResource::collection($query->limit(60)->get());
+        // Flag each job that starts where one of our trucks is parked.
+        $contracts->each(function (Contract $c) use ($fleetCityIds) {
+            $c->at_fleet_city = $fleetCityIds->has($c->origin_city_id);
+        });
+
+        if ($wantBackhaul) {
+            $contracts = $contracts->filter(fn (Contract $c) => $c->at_fleet_city);
+        } else {
+            // Otherwise just float backhaul jobs to the top, keeping the chosen
+            // sort order within each group.
+            $contracts = $contracts->sortByDesc(fn (Contract $c) => $c->at_fleet_city ? 1 : 0);
+        }
+
+        return ContractResource::collection($contracts->take(60)->values());
     }
 
     /**

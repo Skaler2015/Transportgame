@@ -244,7 +244,12 @@ class ShipmentService
             }
 
             // --- Timing --------------------------------------------------------
-            $arrivedAt = now();
+            // The truck physically arrives at its ETA. Resolution is LAZY (no
+            // cron): a shipment is only settled when the player next loads a
+            // page after the ETA has passed — which can be minutes later. Stamp
+            // the scheduled arrival, NOT the wall-clock resolution moment, so a
+            // player who steps away is never wrongly marked LATE.
+            $arrivedAt = $shipment->eta_at ?? now();
             $late = $arrivedAt->greaterThan($contract->deadline_at);
 
             // --- Financial settlement -----------------------------------------
