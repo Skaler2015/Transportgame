@@ -7,9 +7,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ContractResource;
 use App\Models\Contract;
 use App\Models\Vehicle;
+use App\Models\WorldEvent;
 use App\Services\CompanyService;
+use App\Services\EconomyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class ContractController extends Controller
@@ -30,6 +34,10 @@ class ContractController extends Controller
         ]);
 
         $company = $this->company($request);
+
+        // Keep the market alive even if the world-tick cron isn't running: top
+        // up open contracts when a player looks at the board (rate-limited).
+        $this->ensureMarketFresh();
 
         $query = Contract::onMarket()->with(['commodity', 'origin', 'destination'])
             // Only domestic contracts — origin city in the player's country.
@@ -64,6 +72,27 @@ class ContractController extends Controller
         }
 
         return ContractResource::collection($query->limit(60)->get());
+    }
+
+    /**
+     * Self-healing market: at most once per cooldown, expire stale offers and
+     * mint fresh ones so the board never sits empty when the scheduled
+     * world-tick isn't firing. Cheap no-op while on cooldown.
+     */
+    private function ensureMarketFresh(): void
+    {
+        if (! Cache::add('market:replenish-lock', 1, now()->addSeconds(45))) {
+            return; // another request refreshed it very recently
+        }
+
+        try {
+            $economy = app(EconomyService::class);
+            $events = WorldEvent::active()->get();
+            $economy->expireStaleContracts();
+            $economy->replenishContracts($events);
+        } catch (\Throwable $e) {
+            Log::error('Market replenish failed: '.$e->getMessage());
+        }
     }
 
     /** True if any vehicle in $fleet can carry this contract's cargo. */
