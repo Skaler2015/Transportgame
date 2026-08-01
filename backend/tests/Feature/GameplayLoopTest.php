@@ -220,6 +220,36 @@ class GameplayLoopTest extends TestCase
         $this->assertNotSame(Shipment::STATUS_LATE, $shipment->fresh()->status);
     }
 
+    public function test_every_generated_contract_pays_at_least_5_per_km_and_never_runs_at_a_loss(): void
+    {
+        // Mint a spread of contracts across many lanes.
+        for ($i = 0; $i < 4; $i++) {
+            $this->artisan('world:tick');
+        }
+
+        $contracts = Contract::onMarket()->with(['origin', 'destination'])->limit(80)->get();
+        $this->assertNotEmpty($contracts, 'The market should have open contracts.');
+
+        foreach ($contracts as $c) {
+            // ₹5/km floor: payout (cents) is at least distance × ₹5 (× 100),
+            // allowing a little rounding slack.
+            $this->assertGreaterThanOrEqual(
+                $c->distance_km * 5 * 100 - 200,
+                $c->payout,
+                "Contract {$c->id} pays under ₹5/km."
+            );
+
+            // Profitability: payout, after tax, must clear tolls and fuel.
+            $avgToll = (($c->origin->toll_per_km ?? 0) + ($c->destination->toll_per_km ?? 0)) / 2;
+            $tollCents = $c->distance_km * $avgToll * 100;
+            $fuelCents = $c->distance_km * 0.30 * ($c->origin->fuel_price ?? 1.0) * 100;
+            $taxCents = $c->payout * (float) ($c->destination->tax_rate ?? 0);
+            $net = $c->payout - $taxCents - $tollCents - $fuelCents;
+
+            $this->assertGreaterThan(0, $net, "Contract {$c->id} ({$c->origin->name} → {$c->destination->name}) runs at a loss.");
+        }
+    }
+
     public function test_cannot_dispatch_cargo_that_exceeds_vehicle_capacity(): void
     {
         $user = User::factory()->create();

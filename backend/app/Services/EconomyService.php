@@ -194,6 +194,31 @@ class EconomyService
                 ->update(['status' => Contract::STATUS_EXPIRED]);
         }
 
+        // Retire any open job that would run at a loss (its payout no longer
+        // clears its lane's tolls/tax/fuel) — e.g. contracts minted under an
+        // older pricing rule — so the board only shows profitable work.
+        $lossmakers = Contract::where('status', Contract::STATUS_OPEN)
+            ->whereNull('company_id')
+            ->with(['origin:id,toll_per_km,fuel_price', 'destination:id,toll_per_km,tax_rate'])
+            ->get()
+            ->filter(function (Contract $c) {
+                if (! $c->origin || ! $c->destination) {
+                    return false;
+                }
+                $avgToll = (($c->origin->toll_per_km ?? 0) + ($c->destination->toll_per_km ?? 0)) / 2;
+                $tollExpense = $c->distance_km * $avgToll;
+                $fuelExpense = $c->distance_km * 0.30 * ($c->origin->fuel_price ?? 1.0);
+                $denom = max(0.15, 1 - (float) ($c->destination->tax_rate ?? 0) - 0.20);
+                $minProfitable = (($tollExpense + $fuelExpense) / $denom) * 100; // cents
+
+                return $c->payout < $minProfitable * 0.95;
+            })
+            ->pluck('id');
+
+        if ($lossmakers->isNotEmpty()) {
+            Contract::whereIn('id', $lossmakers)->update(['status' => Contract::STATUS_EXPIRED]);
+        }
+
         $commodities = Commodity::all()->keyBy('id');
         $cities = City::all();
 
@@ -304,22 +329,33 @@ class EconomyService
         $difficulty += $isRush ? 1 : 0;
         $difficulty = min(5, $difficulty);
 
-        // Freight is priced PER KILOMETRE (₹5/km base), then scaled by the SIZE
-        // of the load: a light parcel pays the base rate, a full truckload pays
-        // several times more. Without this every short run collapsed onto the
-        // ₹2,000 floor; the load factor spreads payouts and rewards big hauls.
-        $rateLo = (float) ($cfg['rate_per_km_min'] ?? 4.0);
-        $rateHi = (float) ($cfg['rate_per_km_max'] ?? 7.0);
+        // Freight is priced PER KILOMETRE at the configured ₹/km — EVERY job pays
+        // at least that base rate. A bigger load pays a bonus on top (up to 4×);
+        // it never pays less than the flat rate for a small parcel.
+        $rateLo = (float) ($cfg['rate_per_km_min'] ?? 5.0);
+        $rateHi = (float) ($cfg['rate_per_km_max'] ?? 5.0);
         $ratePerKm = $rateLo + (mt_rand() / mt_getrandmax()) * ($rateHi - $rateLo);
 
-        // ~0.6× for a half-tonne parcel up to ~4× for a 24-tonne truckload.
-        $loadFactor = max(0.6, min(4.0, $targetTonnes / 6.0));
+        // 1× for anything up to ~6 t, rising to 4× for a full 24 t truckload.
+        $loadBonus = max(1.0, min(4.0, $targetTonnes / 6.0));
 
-        $payout = $distance * $ratePerKm * $loadFactor;
+        $payout = $distance * $ratePerKm * $loadBonus;
         if ($isRush) {
             $payout *= 1 + $cfg['rush_margin_bonus'];
         }
         $payout *= 1 + ($difficulty - 1) * 0.06;
+
+        // GUARANTEE the job clears its own running costs. Tolls (and, to a lesser
+        // extent, tax + fuel) can eat a long haul; bump the payout so it always
+        // leaves a healthy net margin — no contract is ever a loss.
+        $avgToll = (($origin->toll_per_km ?? 0) + ($best->toll_per_km ?? 0)) / 2;
+        $tollExpense = $distance * $avgToll;
+        $fuelExpense = $distance * 0.30 * ($origin->fuel_price ?? 1.0); // representative truck
+        $taxRate = (float) ($best->tax_rate ?? 0);
+        $marginTarget = 0.20; // want ≥20% net after tax, tolls & fuel
+        $denom = max(0.15, 1 - $taxRate - $marginTarget);
+        $minProfitable = ($tollExpense + $fuelExpense) / $denom;
+        $payout = max($payout, $minProfitable);
 
         $payoutCents = (int) round($payout * 100);
         // No job pays under the configured floor.
