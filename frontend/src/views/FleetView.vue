@@ -18,16 +18,23 @@ const buying = ref<number | null>(null)
 const working = ref<number | null>(null)
 
 async function load() {
-  const [f, d, t, td] = await Promise.all([
+  // Load each section independently so one failing endpoint (e.g. trailers,
+  // before a deploy has migrated) never blanks the whole page.
+  const [f, d, t, td] = await Promise.allSettled([
     api.get('/fleet'),
     api.get('/dealership'),
     api.get('/trailers'),
     api.get('/trailers/dealership'),
   ])
-  vehicles.value = f.data.data
-  catalog.value = d.data.data
-  trailers.value = t.data.data
-  trailerCatalog.value = td.data.data
+  if (f.status === 'fulfilled') vehicles.value = f.value.data.data
+  if (d.status === 'fulfilled') catalog.value = d.value.data.data
+  if (t.status === 'fulfilled') trailers.value = t.value.data.data
+  if (td.status === 'fulfilled') trailerCatalog.value = td.value.data.data
+
+  // Surface the core failures (fleet / vehicle dealership) but stay quiet if
+  // only the newer trailer endpoints are unavailable.
+  if (f.status === 'rejected') throw f.reason
+  if (d.status === 'rejected') throw d.reason
 }
 
 async function buy(m: VehicleModel) {

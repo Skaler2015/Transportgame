@@ -26,21 +26,23 @@ let poll: number | undefined
 const MODE_ICON: Record<string, string> = { road: '🚚', rail: '🚆', sea: '🚢', air: '✈️' }
 
 async function loadAll() {
-  const [m, f, tr, d, s] = await Promise.all([
+  // Independent loads so a single failing endpoint doesn't blank the board.
+  const [m, f, tr, d, s] = await Promise.allSettled([
     api.get('/contracts/mine'),
     api.get('/fleet'),
     api.get('/trailers'),
     api.get('/drivers'),
     api.get('/shipments'),
   ])
-  mine.value = m.data.data.filter((c: Contract) => c.status === 'accepted')
-  vehicles.value = f.data.data
-  trailers.value = tr.data.data
-  drivers.value = d.data.data
-  shipments.value = s.data.data
+  if (m.status === 'fulfilled') mine.value = m.value.data.data.filter((c: Contract) => c.status === 'accepted')
+  if (f.status === 'fulfilled') vehicles.value = f.value.data.data
+  if (tr.status === 'fulfilled') trailers.value = tr.value.data.data
+  if (d.status === 'fulfilled') drivers.value = d.value.data.data
+  if (s.status === 'fulfilled') shipments.value = s.value.data.data
   for (const c of mine.value) {
     if (!selection.value[c.id]) selection.value[c.id] = { vehicle_id: null, trailer_id: null, driver_id: null }
   }
+  if (m.status === 'rejected') throw m.reason
 }
 
 // ---- compatibility helpers ------------------------------------------------

@@ -53,19 +53,22 @@ class EnsureSchemaUpToDate
             return;
         }
 
+        // Try to take a lock so only one request migrates. If the lock file
+        // can't be created (odd storage permissions), we DON'T give up — the DB
+        // migration is what matters, so we fall back to running it without the
+        // lock. migrate --force + worldsync are both idempotent, so a rare
+        // double-run is harmless.
         $lockFile = storage_path('app/.deploy-schema.lock');
         $lock = @fopen($lockFile, 'c');
-        if ($lock === false) {
-            return; // storage not writable — nothing we can safely do
+
+        if ($lock !== false && ! flock($lock, LOCK_EX | LOCK_NB)) {
+            // Another request is migrating right now — serve this one normally.
+            @fclose($lock);
+
+            return;
         }
 
         try {
-            // Non-blocking: if another request already holds the lock it is
-            // migrating right now, so we skip and serve this request normally.
-            if (! flock($lock, LOCK_EX | LOCK_NB)) {
-                return;
-            }
-
             // Re-check under the lock in case a sibling just finished.
             if (@is_file($markerFile) && trim((string) @file_get_contents($markerFile)) === $target) {
                 return;
@@ -78,8 +81,10 @@ class EnsureSchemaUpToDate
         } catch (\Throwable $e) {
             Log::error('EnsureSchemaUpToDate failed: '.$e->getMessage());
         } finally {
-            @flock($lock, LOCK_UN);
-            @fclose($lock);
+            if ($lock !== false) {
+                @flock($lock, LOCK_UN);
+                @fclose($lock);
+            }
         }
     }
 }
