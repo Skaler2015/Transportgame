@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\DriverResource;
 use App\Models\Driver;
 use App\Services\CompanyService;
+use App\Services\ShipmentService;
 use Illuminate\Http\Request;
 use RuntimeException;
 
@@ -14,11 +15,17 @@ class DriverController extends Controller
 {
     use ResolvesCompany;
 
-    public function __construct(private readonly CompanyService $companies) {}
+    public function __construct(
+        private readonly CompanyService $companies,
+        private readonly ShipmentService $shipments,
+    ) {}
 
     public function index(Request $request)
     {
         $company = $this->company($request);
+
+        // Recover rested crews between trips even without the world cron.
+        $this->shipments->restDriversThrottled($company);
 
         $drivers = Driver::where('company_id', $company->id)
             ->orderByDesc('skill')

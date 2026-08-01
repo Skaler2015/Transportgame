@@ -371,6 +371,18 @@ class ShipmentService
         return $due->count();
     }
 
+    /**
+     * Self-healing rest recovery: advance driver rest at most once per ~45s per
+     * company, so crews recover between trips even when the world-tick cron
+     * isn't running (called on Crew/dashboard views).
+     */
+    public function restDriversThrottled(Company $company): void
+    {
+        if (\Illuminate\Support\Facades\Cache::add("drivers:rest:{$company->id}", 1, now()->addSeconds(45))) {
+            $this->restDrivers($company);
+        }
+    }
+
     /** Advance a driver's rest between trips (called by the tick). */
     public function restDrivers(Company $company): void
     {

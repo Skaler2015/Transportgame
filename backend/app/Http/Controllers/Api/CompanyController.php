@@ -42,6 +42,8 @@ class CompanyController extends Controller
         // dashboard, so completed runs bank their payout on the next page load
         // rather than waiting on the world cron.
         $this->shipments->resolveDueFor($company);
+        // Recover rested drivers between trips even without the world cron.
+        $this->shipments->restDriversThrottled($company);
 
         // Unlock any achievements earned since the last dashboard poll and
         // surface them so the client can celebrate the moment.
