@@ -76,10 +76,7 @@ onUnmounted(() => {
 
 <template>
   <Transition name="install">
-    <div
-      v-if="show"
-      class="fixed inset-x-0 bottom-0 z-[1200] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
-    >
+    <div v-if="show" class="install-wrap fixed inset-x-0 z-[1200] p-3">
       <div
         class="glass mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-white/10 p-3 shadow-2xl"
       >
@@ -115,6 +112,15 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* Sit just above the mobile bottom tab bar; flush to the edge on desktop. */
+.install-wrap {
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
+}
+@media (max-width: 1023px) {
+  .install-wrap {
+    bottom: calc(4.75rem + env(safe-area-inset-bottom));
+  }
+}
 .install-enter-active,
 .install-leave-active {
   transition: transform 0.28s ease, opacity 0.28s ease;

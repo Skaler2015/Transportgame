@@ -36,6 +36,15 @@ const nav = [
   { to: '/settings', label: 'Settings', icon: '⚙' },
 ]
 
+// Bottom tab bar for mobile — the core gameplay loop, one tap away. The
+// 5th slot opens the full drawer with every section.
+const bottomNav = [
+  { to: '/dashboard', label: 'Home', icon: '◧' },
+  { to: '/contracts', label: 'Jobs', icon: '▤' },
+  { to: '/operations', label: 'Dispatch', icon: '⟳' },
+  { to: '/fleet', label: 'Fleet', icon: '▦' },
+]
+
 const company = computed(() => game.dashboard?.company ?? auth.company)
 const xpPct = computed(() => {
   const c = company.value
@@ -168,8 +177,36 @@ async function logout() {
         style="padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right))"
       >
         <RouterView />
+        <!-- Reserve space so content scrolls clear of the bottom tab bar. -->
+        <div class="lg:hidden" style="height: calc(4.75rem + env(safe-area-inset-bottom))" />
       </main>
     </div>
+
+    <!-- Mobile bottom tab bar (hidden on lg where the sidebar shows) -->
+    <nav
+      class="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-ink-950/90 backdrop-blur-xl"
+      style="padding-bottom: env(safe-area-inset-bottom)"
+    >
+      <div class="grid grid-cols-5">
+        <RouterLink
+          v-for="item in bottomNav"
+          :key="item.to"
+          :to="item.to"
+          class="flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium text-slate-400 transition"
+          active-class="!text-brand"
+        >
+          <span class="text-xl leading-none">{{ item.icon }}</span>
+          {{ item.label }}
+        </RouterLink>
+        <button
+          class="flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium text-slate-400 transition active:text-brand"
+          @click="mobileOpen = true"
+        >
+          <span class="text-xl leading-none">☰</span>
+          More
+        </button>
+      </div>
+    </nav>
 
     <!-- Mobile navigation drawer -->
     <Transition name="fade">
