@@ -361,6 +361,22 @@ function canDispatch(c: Contract): boolean {
   const sel = selection.value[c.id]
   return !!sel?.vehicle_id && !!sel?.driver_id && (!needsTrailer(c) || !!sel?.trailer_id)
 }
+// Ready to roll: a dispatchable rig exists (truck at origin + trailer if the
+// tractor needs one + a driver) — so we can show a one-tap GO on the row.
+function readyToGo(c: Contract): boolean {
+  const v = bestVehicle(c)
+  return !!v && dispatchableNow(v, c) && !!bestDriver(c)
+}
+// One tap on the row: auto-pick the best rig and dispatch immediately.
+async function quickDispatch(c: Contract) {
+  autoSelect(c)
+  if (!canDispatch(c)) {
+    // Missing something — open the row so the player can complete the choice.
+    expandedContract.value = c.id
+    return
+  }
+  await dispatchNow(c)
+}
 
 // Estimated P&L for a contract, mirroring what the delivery actually charges:
 // tax on the payout (destination rate), tolls along the lane, and fuel burned.
@@ -633,9 +649,20 @@ onUnmounted(() => clearInterval(poll))
               </td>
               <td class="px-2 text-center"><DifficultyStars :value="c.difficulty" /></td>
               <td class="px-3 py-2 text-right whitespace-nowrap">
-                <button class="btn-primary !py-1 !px-3 text-[11px]" @click.stop="toggleContract(c.id)">
-                  {{ expandedContract === c.id ? 'Close' : 'GO →' }}
-                </button>
+                <template v-if="expandedContract === c.id">
+                  <button class="btn-ghost !py-1 !px-3 text-[11px]" @click.stop="toggleContract(c.id)">Close</button>
+                </template>
+                <template v-else-if="readyToGo(c)">
+                  <span class="inline-flex items-center gap-1">
+                    <button class="btn-primary !py-1 !px-3 text-[11px]" :disabled="dispatching === c.id" @click.stop="quickDispatch(c)">
+                      {{ dispatching === c.id ? '…' : 'GO →' }}
+                    </button>
+                    <button class="btn-ghost !py-1 !px-2 text-[11px]" title="Choose vehicle/driver" @click.stop="toggleContract(c.id)">⚙</button>
+                  </span>
+                </template>
+                <template v-else>
+                  <button class="btn-ghost !py-1 !px-3 text-[11px]" @click.stop="toggleContract(c.id)">Dispatch →</button>
+                </template>
               </td>
             </tr>
             <!-- Dispatch drawer -->
@@ -702,7 +729,13 @@ onUnmounted(() => clearInterval(poll))
               <span class="text-slate-400">Profit
                 <span class="font-mono font-semibold" :class="costBreakdown(c).profit >= 0 ? 'text-gain' : 'text-loss'">{{ credits(costBreakdown(c).profit) }}</span>
               </span>
-              <span class="text-brand-soft font-semibold text-[11px]">{{ expandedContract === c.id ? 'Close ▲' : 'Dispatch →' }}</span>
+              <!-- Ready jobs get a one-tap GO right here; others expand to choose. -->
+              <span v-if="expandedContract === c.id" class="text-brand-soft font-semibold text-[11px]">Close ▲</span>
+              <span v-else-if="readyToGo(c)" class="inline-flex items-center gap-1.5 shrink-0">
+                <button class="btn-ghost !py-1 !px-2 text-[11px]" title="Choose vehicle/driver" @click.stop="toggleContract(c.id)">⚙</button>
+                <button class="btn-primary !py-1 !px-4 text-[11px]" :disabled="dispatching === c.id" @click.stop="quickDispatch(c)">{{ dispatching === c.id ? '…' : 'GO →' }}</button>
+              </span>
+              <span v-else class="text-brand-soft font-semibold text-[11px]">Dispatch →</span>
             </div>
           </div>
           <!-- Expanded dispatch -->
