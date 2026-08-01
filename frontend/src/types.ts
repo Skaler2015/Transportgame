@@ -195,6 +195,7 @@ export interface Shipment {
   eta_at: string
   arrived_at: string | null
   event_log: { at: string; text: string }[] | null
+  outcome_note?: string | null
   contract?: Contract
   vehicle?: Vehicle
   trailer?: Trailer

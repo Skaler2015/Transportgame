@@ -33,6 +33,8 @@ async function load() {
 
   // Surface the core failures (fleet / vehicle dealership) but stay quiet if
   // only the newer trailer endpoints are unavailable.
+  void loadEstimate()
+
   if (f.status === 'rejected') throw f.reason
   if (d.status === 'rejected') throw d.reason
 }
@@ -74,6 +76,13 @@ async function refuel(v: Vehicle) {
 }
 
 const servicingAll = ref(false)
+const serviceEstimate = ref<{ count: number; total: number }>({ count: 0, total: 0 })
+async function loadEstimate() {
+  try {
+    const { data } = await api.get('/fleet/service-estimate')
+    serviceEstimate.value = data
+  } catch { /* estimate is best-effort */ }
+}
 async function serviceAll() {
   servicingAll.value = true
   try {
@@ -156,8 +165,10 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
         <h1 class="text-2xl font-bold">Fleet &amp; Dealership</h1>
         <p class="text-slate-400 text-sm">Trucks, trailers, fuel and multi-modal craft — everything that hauls.</p>
       </div>
-      <button class="btn-primary !py-1.5" :disabled="servicingAll" @click="serviceAll">
-        {{ servicingAll ? 'Servicing…' : '⚡ Service & Fuel All' }}
+      <button class="btn-primary !py-1.5" :disabled="servicingAll || serviceEstimate.count === 0" @click="serviceAll">
+        <template v-if="servicingAll">Servicing…</template>
+        <template v-else-if="serviceEstimate.count > 0">⚡ Service &amp; Fuel All · {{ credits(serviceEstimate.total) }}</template>
+        <template v-else>⚡ Service &amp; Fuel All</template>
       </button>
       <div class="flex flex-wrap gap-2 p-1 rounded-xl bg-ink-900/70">
         <button class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition"

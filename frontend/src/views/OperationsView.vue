@@ -51,7 +51,16 @@ async function loadAll() {
   for (const c of mine.value) {
     if (!selection.value[c.id]) selection.value[c.id] = { vehicle_id: null, trailer_id: null, driver_id: null }
   }
+  void loadEstimate()
   if (m.status === 'rejected') throw m.reason
+}
+
+const serviceEstimate = ref<{ count: number; total: number }>({ count: 0, total: 0 })
+async function loadEstimate() {
+  try {
+    const { data } = await api.get('/fleet/service-estimate')
+    serviceEstimate.value = data
+  } catch { /* estimate is best-effort */ }
 }
 
 // ---- compatibility helpers ------------------------------------------------
@@ -185,8 +194,10 @@ onUnmounted(() => clearInterval(poll))
         <h1 class="text-2xl font-bold">Operations — Job Board</h1>
         <p class="text-slate-400 text-sm">Assign a vehicle, a matching trailer, a driver and fuel — then roll.</p>
       </div>
-      <button class="btn-ghost !py-1.5" :disabled="servicingAll" @click="serviceAll">
-        {{ servicingAll ? 'Servicing…' : '⚡ Service & Fuel All' }}
+      <button class="btn-ghost !py-1.5" :disabled="servicingAll || serviceEstimate.count === 0" @click="serviceAll">
+        <template v-if="servicingAll">Servicing…</template>
+        <template v-else-if="serviceEstimate.count > 0">⚡ Service &amp; Fuel All · {{ credits(serviceEstimate.total) }}</template>
+        <template v-else>⚡ Service &amp; Fuel All</template>
       </button>
     </div>
 
@@ -306,6 +317,10 @@ onUnmounted(() => clearInterval(poll))
           <div class="min-w-0">
             <p class="truncate">{{ s.contract?.origin?.name }} → {{ s.contract?.destination?.name }}</p>
             <p class="text-[11px] text-slate-400 truncate">{{ s.contract?.commodity?.name }} · {{ s.driver?.name }}</p>
+            <p v-if="s.outcome_note && s.status !== 'delivered'" class="text-[11px] mt-0.5 truncate"
+              :class="s.status === 'failed' ? 'text-loss' : 'text-gold'">
+              {{ s.outcome_note }}
+            </p>
           </div>
           <div class="text-right shrink-0">
             <p class="font-semibold uppercase text-xs" :class="statusStyle[s.status]">{{ s.status }}</p>

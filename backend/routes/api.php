@@ -75,6 +75,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dealership', [FleetController::class, 'dealership']);
     Route::post('/dealership/{model}/buy', [FleetController::class, 'buy']);
     Route::post('/vehicles/{vehicle}/refuel', [FleetController::class, 'refuel']);
+    Route::get('/fleet/service-estimate', [FleetController::class, 'serviceEstimate']);
     Route::post('/fleet/full-service-all', [FleetController::class, 'fullServiceAll']);
 
     // Trailers: yard, dealership & purchase.

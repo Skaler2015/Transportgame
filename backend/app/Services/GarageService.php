@@ -69,19 +69,9 @@ class GarageService
         }
 
         $vehicle->loadMissing('model', 'city');
-        $cfg = config('transoria.garage');
-
-        $repairCost = (int) round((100 - $vehicle->condition) * $cfg['repair_cost_per_point']
-            + $vehicle->tire_wear * $cfg['tire_cost_per_point']);
-        $oilCost = $vehicle->oil_level < 100 ? (int) $cfg['oil_change_cost'] : 0;
-        $battCost = $vehicle->battery < 100 ? (int) $cfg['battery_cost'] : 0;
 
         $capacity = (float) ($vehicle->model->fuel_capacity ?? 0);
-        $room = max(0, $capacity - $vehicle->fuel);
-        $pricePerLitre = $vehicle->city->fuel_price ?? $company->headquarters?->fuel_price ?? 1.0;
-        $fuelCost = (int) round($room * $pricePerLitre * 100);
-
-        $total = $repairCost + $oilCost + $battCost + $fuelCost;
+        $total = $this->fullServiceCost($company, $vehicle);
         if ($total <= 0) {
             throw new RuntimeException('This vehicle is already serviced and fuelled.');
         }
@@ -198,6 +188,54 @@ class GarageService
         }
 
         return ['serviced' => $count, 'total' => $total];
+    }
+
+    /**
+     * The cost of fully servicing + refuelling a single vehicle right now,
+     * without charging. Mirrors {@see fullService()}'s pricing exactly.
+     */
+    public function fullServiceCost(Company $company, Vehicle $vehicle): int
+    {
+        $vehicle->loadMissing('model', 'city');
+        $cfg = config('transoria.garage');
+
+        $repairCost = (int) round((100 - $vehicle->condition) * $cfg['repair_cost_per_point']
+            + $vehicle->tire_wear * $cfg['tire_cost_per_point']);
+        $oilCost = $vehicle->oil_level < 100 ? (int) $cfg['oil_change_cost'] : 0;
+        $battCost = $vehicle->battery < 100 ? (int) $cfg['battery_cost'] : 0;
+
+        $capacity = (float) ($vehicle->model->fuel_capacity ?? 0);
+        $room = max(0, $capacity - $vehicle->fuel);
+        $pricePerLitre = $vehicle->city->fuel_price ?? $company->headquarters?->fuel_price ?? 1.0;
+        $fuelCost = (int) round($room * $pricePerLitre * 100);
+
+        return $repairCost + $oilCost + $battCost + $fuelCost;
+    }
+
+    /**
+     * Dry-run estimate of what "Service & Fuel All" would cost right now:
+     * the number of idle vehicles that need work and the total bill.
+     *
+     * @return array{count: int, total: int}
+     */
+    public function estimateFullServiceAll(Company $company): array
+    {
+        $vehicles = Vehicle::where('company_id', $company->id)
+            ->where('status', Vehicle::STATUS_IDLE)
+            ->with('model', 'city')
+            ->get();
+
+        $count = 0;
+        $total = 0;
+        foreach ($vehicles as $vehicle) {
+            $cost = $this->fullServiceCost($company, $vehicle);
+            if ($cost > 0) {
+                $count++;
+                $total += $cost;
+            }
+        }
+
+        return ['count' => $count, 'total' => $total];
     }
 
     /** Buy the next level of an upgrade (engine|tires|trailer). */

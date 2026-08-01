@@ -60,6 +60,15 @@ async function loadFleet() {
   if (f.status === 'fulfilled') vehicles.value = f.value.data.data
   if (tr.status === 'fulfilled') trailers.value = tr.value.data.data
   if (d.status === 'fulfilled') drivers.value = d.value.data.data
+  void loadEstimate()
+}
+
+const serviceEstimate = ref<{ count: number; total: number }>({ count: 0, total: 0 })
+async function loadEstimate() {
+  try {
+    const { data } = await api.get('/fleet/service-estimate')
+    serviceEstimate.value = data
+  } catch { /* estimate is best-effort */ }
 }
 
 // ---- compatibility (mirrors Operations) -----------------------------------
@@ -170,8 +179,10 @@ onUnmounted(() => clearInterval(poll))
         <h1 class="text-2xl font-bold">Contract Market</h1>
         <p class="text-slate-400 text-sm">Claim a job and dispatch it right here. Auto-refreshes as new jobs appear.</p>
       </div>
-      <button class="btn-ghost !py-1.5" :disabled="servicingAll" @click="serviceAll">
-        {{ servicingAll ? 'Servicing…' : '⚡ Service & Fuel All' }}
+      <button class="btn-ghost !py-1.5" :disabled="servicingAll || serviceEstimate.count === 0" @click="serviceAll">
+        <template v-if="servicingAll">Servicing…</template>
+        <template v-else-if="serviceEstimate.count > 0">⚡ Service &amp; Fuel All · {{ credits(serviceEstimate.total) }}</template>
+        <template v-else>⚡ Service &amp; Fuel All</template>
       </button>
     </div>
 

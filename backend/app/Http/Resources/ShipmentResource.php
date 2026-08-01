@@ -25,6 +25,11 @@ class ShipmentResource extends JsonResource
             'eta_at' => $this->eta_at?->toIso8601String(),
             'arrived_at' => $this->arrived_at?->toIso8601String(),
             'event_log' => $this->event_log,
+            // The last thing that happened — e.g. "Accident en route — cargo
+            // lost." — so the UI can explain a FAILED / LATE outcome at a glance.
+            'outcome_note' => is_array($this->event_log) && count($this->event_log)
+                ? ($this->event_log[count($this->event_log) - 1]['text'] ?? null)
+                : null,
             'contract' => new ContractResource($this->whenLoaded('contract')),
             'vehicle' => new VehicleResource($this->whenLoaded('vehicle')),
             'trailer' => new TrailerResource($this->whenLoaded('trailer')),

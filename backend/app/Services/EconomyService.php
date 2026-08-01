@@ -304,13 +304,18 @@ class EconomyService
         $difficulty += $isRush ? 1 : 0;
         $difficulty = min(5, $difficulty);
 
-        // Freight is priced PER KILOMETRE at a random ₹4–7/km, with a rush
-        // premium and a small difficulty bump. Distance is the main driver.
+        // Freight is priced PER KILOMETRE (₹5/km base), then scaled by the SIZE
+        // of the load: a light parcel pays the base rate, a full truckload pays
+        // several times more. Without this every short run collapsed onto the
+        // ₹2,000 floor; the load factor spreads payouts and rewards big hauls.
         $rateLo = (float) ($cfg['rate_per_km_min'] ?? 4.0);
         $rateHi = (float) ($cfg['rate_per_km_max'] ?? 7.0);
         $ratePerKm = $rateLo + (mt_rand() / mt_getrandmax()) * ($rateHi - $rateLo);
 
-        $payout = $distance * $ratePerKm;
+        // ~0.6× for a half-tonne parcel up to ~4× for a 24-tonne truckload.
+        $loadFactor = max(0.6, min(4.0, $targetTonnes / 6.0));
+
+        $payout = $distance * $ratePerKm * $loadFactor;
         if ($isRush) {
             $payout *= 1 + $cfg['rush_margin_bonus'];
         }

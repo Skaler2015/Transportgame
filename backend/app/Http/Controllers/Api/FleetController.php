@@ -22,6 +22,14 @@ class FleetController extends Controller
         private readonly GarageService $garage,
     ) {}
 
+    /** What "Service & Fuel All" would cost right now (dry run, no charge). */
+    public function serviceEstimate(Request $request)
+    {
+        $company = $this->company($request);
+
+        return response()->json($this->garage->estimateFullServiceAll($company));
+    }
+
     /** One click: full-service + refuel every idle vehicle. */
     public function fullServiceAll(Request $request)
     {
