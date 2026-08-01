@@ -397,7 +397,9 @@ onUnmounted(() => clearInterval(poll))
     <div v-if="loading" class="grid place-items-center h-64 text-slate-500">Loading market…</div>
 
     <!-- Compact, sortable contract table. Click a row's GO to dispatch. -->
-    <div v-else-if="contracts.length" class="glass !p-0 overflow-hidden">
+    <div v-else-if="contracts.length">
+      <!-- Desktop: full sortable table (md and up) -->
+      <div class="hidden md:block glass !p-0 overflow-hidden">
       <div class="overflow-x-auto">
       <table class="w-full text-sm min-w-[880px] border-collapse">
         <thead class="text-[10px] uppercase tracking-wider text-slate-400 select-none bg-ink-900/80 backdrop-blur sticky top-0 z-10">
@@ -493,6 +495,56 @@ onUnmounted(() => clearInterval(poll))
           </template>
         </tbody>
       </table>
+      </div>
+      </div>
+
+      <!-- Mobile: compact card list (tap a card to dispatch) -->
+      <div class="md:hidden space-y-2">
+        <div v-for="c in sortedContracts" :key="c.id" class="glass !p-3"
+          :class="c.at_fleet_city ? 'ring-1 ring-brand/40' : ''">
+          <div class="cursor-pointer" @click="toggleContract(c.id)">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2 min-w-0">
+                <CommodityBadge :commodity="c.commodity" size="sm" />
+                <span class="font-semibold text-sm truncate">{{ c.origin?.name }} <span class="text-brand">→</span> {{ c.destination?.name }}</span>
+              </div>
+              <span class="font-mono text-gold font-semibold text-sm shrink-0">{{ credits(c.payout) }}</span>
+            </div>
+            <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+              <span v-if="c.at_fleet_city" class="chip text-[9px]" :class="c.fleet_arriving ? 'bg-gold/20 text-gold' : 'bg-gain/20 text-gain'">🚚 {{ c.fleet_arriving ? 'arriving' : 'here' }}</span>
+              <span v-if="c.is_rush" class="chip text-[9px] bg-loss/20 text-loss">RUSH</span>
+              <span class="text-[11px] text-slate-400 truncate">{{ c.commodity?.name }} · {{ num(c.distance_km) }}km · {{ num(c.total_weight ?? 0, 1) }}t · ⏱{{ etaText(c.distance_km) }}</span>
+            </div>
+            <div class="flex items-center justify-between mt-1.5 text-[12px]">
+              <span class="text-slate-400">Profit
+                <span class="font-mono font-semibold" :class="costBreakdown(c).profit >= 0 ? 'text-gain' : 'text-loss'">{{ credits(costBreakdown(c).profit) }}</span>
+              </span>
+              <span class="text-brand-soft font-semibold text-[11px]">{{ expandedContract === c.id ? 'Close ▲' : 'Dispatch →' }}</span>
+            </div>
+          </div>
+          <!-- Expanded dispatch -->
+          <div v-if="expandedContract === c.id" class="mt-2 pt-2 border-t border-white/10 space-y-1.5">
+            <select v-model="selection[c.id].vehicle_id" class="input !py-1.5 text-xs">
+              <option :value="null" disabled>Choose vehicle…</option>
+              <option v-for="v in compatibleVehicles(c)" :key="v.id" :value="v.id">{{ v.nickname || v.model?.name }} · fuel {{ Math.round(v.fuel_pct ?? 100) }}%</option>
+            </select>
+            <select v-if="needsTrailer(c)" v-model="selection[c.id].trailer_id" class="input !py-1.5 text-xs">
+              <option :value="null" disabled>Attach trailer…</option>
+              <option v-for="t in compatibleTrailers(c)" :key="t.id" :value="t.id">{{ t.model?.name }}</option>
+            </select>
+            <select v-model="selection[c.id].driver_id" class="input !py-1.5 text-xs">
+              <option :value="null" disabled>Choose driver…</option>
+              <option v-for="d in compatibleDrivers(c)" :key="d.id" :value="d.id">{{ d.name }} · skill {{ d.skill }}</option>
+            </select>
+            <div class="flex items-center justify-between pt-1">
+              <button class="text-[11px] text-slate-400" :disabled="accepting === c.id" @click="accept(c)">{{ accepting === c.id ? '…' : 'Claim for later' }}</button>
+              <button class="btn-primary !py-1.5 !px-5" :disabled="dispatching === c.id || !canDispatch(c)" @click="dispatchNow(c)">{{ dispatching === c.id ? '…' : 'GO →' }}</button>
+            </div>
+            <p v-if="!compatibleVehicles(c).length" class="text-[10px] text-loss">No compatible idle vehicle here.</p>
+            <p v-else-if="needsTrailer(c) && !compatibleTrailers(c).length" class="text-[10px] text-loss">Needs a matching trailer.</p>
+            <p v-else-if="!compatibleDrivers(c).length" class="text-[10px] text-loss">No available driver.</p>
+          </div>
+        </div>
       </div>
     </div>
 
