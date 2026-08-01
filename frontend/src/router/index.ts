@@ -26,6 +26,7 @@ const routes = [
       { path: 'research', name: 'research', component: () => import('../views/ResearchView.vue') },
       { path: 'achievements', name: 'achievements', component: () => import('../views/AchievementsView.vue') },
       { path: 'news', name: 'news', component: () => import('../views/NewsView.vue') },
+      { path: 'advisor', name: 'advisor', component: () => import('../views/AdvisorView.vue') },
       { path: 'leaderboard', name: 'leaderboard', component: () => import('../views/LeaderboardView.vue') },
       { path: 'settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
     ],

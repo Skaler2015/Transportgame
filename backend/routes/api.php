@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AccountsController;
 use App\Http\Controllers\Api\AchievementController;
+use App\Http\Controllers\Api\AdvisorController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\ContractController;
@@ -90,6 +91,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/achievements', [AchievementController::class, 'index']);
     Route::get('/news', [NewsController::class, 'index']);
+    Route::get('/advisor', [AdvisorController::class, 'index']);
 
     Route::get('/research', [ResearchController::class, 'index']);
     Route::post('/research/{node}/unlock', [ResearchController::class, 'unlock']);

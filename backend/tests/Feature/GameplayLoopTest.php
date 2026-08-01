@@ -371,6 +371,23 @@ class GameplayLoopTest extends TestCase
         $this->assertSame(Contract::STATUS_IN_PROGRESS, $contract->fresh()->status);
     }
 
+    public function test_advisor_returns_actionable_insights(): void
+    {
+        (new \Database\Seeders\ListedCompanySeeder)->run();
+
+        $token = $this->postJson('/api/register', [
+            'name' => 'Boss', 'email' => 'boss@transoria.io', 'password' => 'password123',
+            'company_name' => 'Advisor Co',
+        ])->json('token');
+
+        $this->artisan('world:tick');
+
+        $resp = $this->withToken($token)->getJson('/api/advisor');
+        $resp->assertOk();
+        $this->assertNotEmpty($resp->json('data'));
+        $this->assertArrayHasKey('title', $resp->json('data')[0]);
+    }
+
     public function test_stock_trading_buys_sells_and_pays_dividends(): void
     {
         (new \Database\Seeders\ListedCompanySeeder)->run();
