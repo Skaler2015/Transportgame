@@ -26,6 +26,11 @@ class Trailer extends Model
         return $this->belongsTo(TrailerModel::class, 'trailer_model_id');
     }
 
+    public function city(): BelongsTo
+    {
+        return $this->belongsTo(City::class, 'city_id');
+    }
+
     public function isAvailable(): bool
     {
         return $this->status === self::STATUS_IDLE && $this->condition > 10;

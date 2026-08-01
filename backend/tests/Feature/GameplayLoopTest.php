@@ -6,6 +6,7 @@ use App\Models\Contract;
 use App\Models\Driver;
 use App\Models\Shipment;
 use App\Models\Trailer;
+use App\Models\TrailerModel;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehicleModel;
@@ -263,6 +264,26 @@ class GameplayLoopTest extends TestCase
 
         $ship->dispatch($company->fresh(), $contract->fresh(), $vehicle->fresh(), $driver->fresh());
         $this->assertSame(Vehicle::STATUS_EN_ROUTE, $vehicle->fresh()->status);
+    }
+
+    public function test_buy_trailer_endpoint_returns_the_purchased_trailer(): void
+    {
+        // Exercises the full HTTP path incl. ->load('model','city') + resource
+        // serialization, which a service-only test would miss.
+        $token = $this->postJson('/api/register', [
+            'name' => 'Buyer',
+            'email' => 'buyer@transoria.io',
+            'password' => 'password123',
+            'company_name' => 'Buyer Freight',
+        ])->json('token');
+
+        $model = TrailerModel::where('key', 'box-std')->first();
+
+        $this->withToken($token)
+            ->postJson("/api/trailers/dealership/{$model->id}/buy")
+            ->assertCreated()
+            ->assertJsonPath('data.model.key', 'box-std')
+            ->assertJsonPath('data.status', 'idle');
     }
 
     public function test_reset_wipes_progress_and_reissues_the_starter_loadout(): void
