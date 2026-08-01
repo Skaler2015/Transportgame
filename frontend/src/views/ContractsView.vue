@@ -182,6 +182,34 @@ async function fixTrailer(t: Trailer) {
   } catch (e) { toast.error(apiError(e)) } finally { servingTrailer.value = null }
 }
 const servingVeh = ref<number | null>(null)
+const bulkFixing = ref(false)
+// Run every needed service on one vehicle in sequence, then refresh once.
+async function fixAllForVehicle(v: Vehicle) {
+  servingVeh.value = v.id
+  try {
+    for (const need of vehicleNeeds(v)) {
+      if (need === 'repair') await api.post(`/vehicles/${v.id}/repair`)
+      else await api.post(`/vehicles/${v.id}/service`, { type: need })
+    }
+    toast.success(`${fleetTag(v.fleet_no)} fully serviced.`)
+    await loadFleet(); game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)); await loadFleet().catch(() => {}) } finally { servingVeh.value = null }
+}
+// Service every vehicle that needs it, one after another (stops on an error,
+// e.g. out of cash), then refresh.
+async function fixAllVehicles() {
+  bulkFixing.value = true
+  try {
+    for (const v of [...vehiclesNeedingFix.value]) {
+      for (const need of vehicleNeeds(v)) {
+        if (need === 'repair') await api.post(`/vehicles/${v.id}/repair`)
+        else await api.post(`/vehicles/${v.id}/service`, { type: need })
+      }
+    }
+    toast.success('All vehicles serviced.')
+    await loadFleet(); game.refreshDashboard().catch(() => {})
+  } catch (e) { toast.error(apiError(e)); await loadFleet().catch(() => {}) } finally { bulkFixing.value = false }
+}
 // One click fixes exactly what was clicked, right from the Free Vehicles panel.
 async function fixNeed(v: Vehicle, need: string) {
   servingVeh.value = v.id
@@ -578,14 +606,19 @@ onUnmounted(() => clearInterval(poll))
     <!-- Mobile alert: free vehicles that need service. Tap to expand the list
          right here and fix each one in place — no scrolling to another panel. -->
     <div v-if="vehiclesNeedingFix.length" class="lg:hidden glass !p-3 ring-1 ring-gold/40">
-      <button type="button" class="w-full flex items-center justify-between gap-2 text-left"
-        @click="serviceOpen = !serviceOpen">
-        <span class="text-sm text-gold">
+      <div class="w-full flex items-center justify-between gap-2">
+        <button type="button" class="text-sm text-gold text-left flex-1 min-w-0" @click="serviceOpen = !serviceOpen">
           🛠 {{ vehiclesNeedingFix.length }} vehicle(s) need service
           <span class="font-mono">· {{ credits(allFixTotal) }}</span>
-        </span>
-        <span class="text-xs text-brand-soft shrink-0">{{ serviceOpen ? 'Hide ▲' : 'Fix here ▼' }}</span>
-      </button>
+        </button>
+        <button type="button" class="btn-primary !py-1 !px-3 text-[11px] shrink-0"
+          :disabled="bulkFixing || servingVeh !== null" @click="fixAllVehicles">
+          {{ bulkFixing ? 'Fixing…' : '🔧 Fix all' }}
+        </button>
+        <button type="button" class="text-xs text-brand-soft shrink-0 px-1" @click="serviceOpen = !serviceOpen">
+          {{ serviceOpen ? '▲' : '▼' }}
+        </button>
+      </div>
       <div v-if="serviceOpen" class="mt-2 pt-2 border-t border-white/10 divide-y divide-white/5">
         <div v-for="v in vehiclesNeedingFix" :key="v.id" class="py-2">
           <div class="flex items-center justify-between gap-2">
@@ -606,9 +639,11 @@ onUnmounted(() => clearInterval(poll))
               :disabled="servingVeh === v.id" @click="fixNeed(v, need)">
               {{ NEED_ICON[need] }} {{ servingVeh === v.id ? '…' : need }}<span v-if="needCost(v, need)" class="font-mono ml-1 normal-case">{{ credits(needCost(v, need)) }}</span>
             </button>
-            <span v-if="vehicleNeeds(v).length > 1" class="text-[10px] text-slate-400 ml-auto">
-              Total <span class="font-mono text-gold font-semibold">{{ credits(vehicleFixTotal(v)) }}</span>
-            </span>
+            <button type="button"
+              class="chip bg-brand/20 text-brand-soft hover:bg-brand/30 text-[10px] ml-auto disabled:opacity-40"
+              :disabled="servingVeh === v.id || bulkFixing" @click="fixAllForVehicle(v)">
+              {{ servingVeh === v.id ? 'Fixing…' : '🔧 Fix all' }}<span class="font-mono ml-1">{{ credits(vehicleFixTotal(v)) }}</span>
+            </button>
           </div>
         </div>
       </div>
