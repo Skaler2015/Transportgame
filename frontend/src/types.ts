@@ -256,6 +256,19 @@ export interface NewsItem {
   occurred_at: string
 }
 
+export interface Stock {
+  id: number
+  key: string
+  name: string
+  sector: string
+  share_price: number
+  change_pct: number
+  dividend_yield: number
+  shares_held: number
+  avg_cost: number
+  position_value: number
+}
+
 export interface Dashboard {
   company: Company
   active_shipments: Shipment[]

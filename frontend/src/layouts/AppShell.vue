@@ -28,6 +28,7 @@ const nav = [
   { to: '/exchange', label: 'Exchange', icon: '⇄' },
   { to: '/missions', label: 'Missions', icon: '✓' },
   { to: '/finance', label: 'Finance', icon: '$' },
+  { to: '/stocks', label: 'Stock Exchange', icon: '📈' },
   { to: '/accounts', label: 'Accounts', icon: '▤' },
   { to: '/guilds', label: 'Guilds', icon: '⚑' },
   { to: '/map', label: 'Live Map', icon: '◎' },

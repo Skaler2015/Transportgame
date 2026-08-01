@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\MissionController;
 use App\Http\Controllers\Api\NewsController;
 use App\Http\Controllers\Api\ResearchController;
 use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\TrailerController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\WorldController;
@@ -121,6 +122,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/guilds/{guild}/join', [GuildController::class, 'join']);
     Route::post('/guilds/leave', [GuildController::class, 'leave']);
     Route::post('/guilds/contribute', [GuildController::class, 'contribute']);
+
+    // Stock exchange.
+    Route::get('/stocks', [StockController::class, 'index']);
+    Route::post('/stocks/{listed}/buy', [StockController::class, 'buy']);
+    Route::post('/stocks/{listed}/sell', [StockController::class, 'sell']);
 
     // Player exchange.
     Route::get('/exchange', [ExchangeController::class, 'index']);

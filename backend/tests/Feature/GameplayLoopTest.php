@@ -371,6 +371,32 @@ class GameplayLoopTest extends TestCase
         $this->assertSame(Contract::STATUS_IN_PROGRESS, $contract->fresh()->status);
     }
 
+    public function test_stock_trading_buys_sells_and_pays_dividends(): void
+    {
+        (new \Database\Seeders\ListedCompanySeeder)->run();
+
+        $user = User::factory()->create();
+        $company = app(CompanyService::class)->found($user, 'Investor Co');
+        $company->update(['cash' => 10_000_000_00]);
+        $stocks = app(\App\Services\StockService::class);
+
+        $listed = \App\Models\ListedCompany::first();
+
+        $stocks->buy($company->fresh(), $listed, 100);
+        $holding = \App\Models\ShareHolding::where('company_id', $company->id)->first();
+        $this->assertSame(100, (int) $holding->shares);
+
+        // A due dividend pays out.
+        $holding->update(['last_dividend_at' => now()->subHour()]);
+        $cashBefore = $company->fresh()->cash;
+        $stocks->refresh($company->fresh());
+        $this->assertGreaterThan($cashBefore, $company->fresh()->cash);
+
+        // Selling reduces the position.
+        $stocks->sell($company->fresh(), $listed->fresh(), 40);
+        $this->assertSame(60, (int) \App\Models\ShareHolding::where('company_id', $company->id)->first()->shares);
+    }
+
     public function test_warehouse_upgrades_expand_capacity_and_unlock_storage(): void
     {
         $user = \App\Models\User::factory()->create();

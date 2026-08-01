@@ -9,6 +9,7 @@ use App\Models\Vehicle;
 use App\Services\CompanyService;
 use Database\Seeders\CitySeeder;
 use Database\Seeders\CommoditySeeder;
+use Database\Seeders\ListedCompanySeeder;
 use Database\Seeders\TrailerModelSeeder;
 use Database\Seeders\VehicleModelSeeder;
 use Illuminate\Console\Command;
@@ -38,6 +39,7 @@ class WorldSync extends Command
         (new CitySeeder)->run();
         (new VehicleModelSeeder)->run();
         (new TrailerModelSeeder)->run();
+        (new ListedCompanySeeder)->run();
 
         // 1. Neutralise legacy fictional cities (those with no real country).
         $legacyIds = City::whereNull('country')->pluck('id');

@@ -14,7 +14,7 @@ return [
     // deploy the app notices the stored marker no longer matches and runs
     // `migrate --force` + `transoria:worldsync` once, so shared hosts that
     // never run the CLI still stay fully migrated. See EnsureSchemaUpToDate.
-    'schema_version' => '2026.08.07-warehouse-ops',
+    'schema_version' => '2026.08.08-stock-exchange',
 
     // In-game currency label.
     'currency' => ['code' => 'CR', 'symbol' => '₡', 'name' => 'Credits'],
@@ -278,6 +278,14 @@ return [
     'guild' => [
         'create_cost' => 80_000_00,   // ₡ cents to found a guild
         'max_members' => 30,
+    ],
+
+    // Stock exchange.
+    'stocks' => [
+        'price_tick_seconds' => 60,        // min gap between lazy price walks
+        'dividend_interval_minutes' => 20, // how often a holding pays out
+        'price_floor_mult' => 0.3,         // vs base price
+        'price_ceiling_mult' => 4.0,
     ],
 
     // Player exchange.
