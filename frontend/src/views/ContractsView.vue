@@ -15,6 +15,7 @@ const contracts = ref<Contract[]>([])
 const loading = ref(false)
 const accepting = ref<number | null>(null)
 const filters = ref({ origin_city_id: '', commodity_id: '', sort: 'payout' })
+const haulableOnly = ref(true)
 
 const sortedCities = computed(() => [...game.cities].sort((a, b) => a.name.localeCompare(b.name)))
 
@@ -24,6 +25,7 @@ async function load() {
     const params: Record<string, string> = { sort: filters.value.sort }
     if (filters.value.origin_city_id) params.origin_city_id = filters.value.origin_city_id
     if (filters.value.commodity_id) params.commodity_id = filters.value.commodity_id
+    if (haulableOnly.value) params.haulable = '1'
     const { data } = await api.get('/contracts', { params })
     contracts.value = data.data
   } catch (e) {
@@ -88,6 +90,10 @@ onMounted(async () => {
         </select>
       </div>
       <button class="btn-ghost" @click="load">↻ Refresh</button>
+      <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none ml-auto">
+        <input type="checkbox" v-model="haulableOnly" class="accent-brand h-4 w-4" @change="load" />
+        Only what my fleet can haul
+      </label>
     </div>
 
     <div v-if="loading" class="grid place-items-center h-64 text-slate-500">Loading market…</div>
@@ -130,7 +136,11 @@ onMounted(async () => {
     </div>
 
     <div v-if="!loading && !contracts.length" class="glass p-10 text-center text-slate-400">
-      No contracts match those filters. Try widening your search or advancing the world.
+      <p v-if="haulableOnly">No open contracts fit an available truck right now.</p>
+      <p v-else>No contracts match those filters. Try widening your search or advancing the world.</p>
+      <p v-if="haulableOnly" class="text-xs text-slate-500 mt-2">
+        Free up or buy a bigger truck, or untick “Only what my fleet can haul” to see everything.
+      </p>
     </div>
   </div>
 </template>

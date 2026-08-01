@@ -120,4 +120,25 @@ class ExpansionTest extends TestCase
 
         $this->assertSame(1, $vehicle->fresh()->engine_level);
     }
+
+    public function test_haulable_filter_only_returns_fittable_contracts(): void
+    {
+        $vehicle = Vehicle::where('company_id', $this->user->company->id)->with('model')->first();
+
+        // Mint a market with contracts.
+        for ($i = 0; $i < 4; $i++) {
+            $this->artisan('world:tick');
+        }
+
+        $all = $this->getJson('/api/contracts?haulable=0')->json('data');
+        $haulable = $this->getJson('/api/contracts?haulable=1')->json('data');
+
+        $this->assertLessThanOrEqual(count($all), count($haulable));
+
+        // Every returned contract must physically fit the (only) starter truck.
+        foreach ($haulable as $c) {
+            $this->assertLessThanOrEqual($vehicle->effectiveCapacityWeight() + 0.001, $c['total_weight']);
+            $this->assertLessThanOrEqual($vehicle->effectiveCapacityVolume() + 0.001, $c['total_volume']);
+        }
+    }
 }

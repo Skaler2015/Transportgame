@@ -6,8 +6,10 @@ use App\Http\Controllers\Concerns\ResolvesCompany;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ContractResource;
 use App\Models\Contract;
+use App\Models\Vehicle;
 use App\Services\CompanyService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use RuntimeException;
 
 class ContractController extends Controller
@@ -24,6 +26,7 @@ class ContractController extends Controller
             'destination_city_id' => ['nullable', 'integer', 'exists:cities,id'],
             'commodity_id' => ['nullable', 'integer', 'exists:commodities,id'],
             'sort' => ['nullable', 'in:payout,distance_km,difficulty,deadline_at'],
+            'haulable' => ['nullable', 'boolean'],
         ]);
 
         $query = Contract::onMarket()->with(['commodity', 'origin', 'destination']);
@@ -40,7 +43,37 @@ class ContractController extends Controller
             $query->reorder()->orderBy($sort);
         }
 
+        // When requested, keep only contracts at least one AVAILABLE, compatible
+        // vehicle in the player's fleet could actually haul.
+        if (filter_var($filters['haulable'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $company = $this->company($request);
+            $fleet = Vehicle::where('company_id', $company->id)
+                ->where('status', Vehicle::STATUS_IDLE)
+                ->where('condition', '>', 15)
+                ->with('model')->get();
+
+            $contracts = $query->limit(300)->get()
+                ->filter(fn (Contract $c) => $this->haulableBy($c, $fleet))
+                ->take(60)->values();
+
+            return ContractResource::collection($contracts);
+        }
+
         return ContractResource::collection($query->limit(60)->get());
+    }
+
+    /** True if any vehicle in $fleet can carry this contract's cargo. */
+    private function haulableBy(Contract $contract, Collection $fleet): bool
+    {
+        $commodity = $contract->commodity;
+        $weight = $commodity->weight_per_unit * $contract->units;
+        $volume = $commodity->volume_per_unit * $contract->units;
+
+        return $fleet->contains(function (Vehicle $v) use ($commodity, $weight, $volume) {
+            return $commodity->canBeCarriedBy($v->model)
+                && $weight <= $v->effectiveCapacityWeight() + 0.001
+                && $volume <= $v->effectiveCapacityVolume() + 0.001;
+        });
     }
 
     /** Contracts this company has accepted or is running. */
