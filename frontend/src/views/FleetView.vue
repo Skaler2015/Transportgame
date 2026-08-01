@@ -165,6 +165,34 @@ function trailerTags(m?: TrailerModel): string {
   return [m.can_reefer && '❄ reefer', m.can_tanker && '⬢ tanker', m.can_hazmat && '☣ hazmat'].filter(Boolean).join(' · ') || 'general'
 }
 
+// What each vehicle needs, so the UI can flag it and highlight the right button.
+function needs(v: Vehicle) {
+  return {
+    repair: (v.condition ?? 100) < 70 || (v.tire_wear ?? 0) > 40,
+    oil: (v.oil_level ?? 100) < 40,
+    battery: (v.battery ?? 100) < 40,
+    insurance: !v.is_insured,
+    registration: !v.is_registered,
+  }
+}
+// A single "how badly does this need attention" score for sorting.
+function needScore(v: Vehicle): number {
+  return (100 - (v.condition ?? 100))
+    + (v.tire_wear ?? 0)
+    + (100 - (v.oil_level ?? 100)) * 0.8
+    + (100 - (v.battery ?? 100)) * 0.8
+    + (v.is_insured ? 0 : 60)
+    + (v.is_registered ? 0 : 60)
+}
+// Short human summary of what a vehicle needs, e.g. "repair · oil · insurance".
+function needSummary(v: Vehicle): string {
+  const n = needs(v)
+  return [n.repair && 'repair', n.oil && 'oil', n.battery && 'battery', n.insurance && 'insurance', n.registration && 'registration']
+    .filter(Boolean).join(' · ')
+}
+// Neediest trucks first, so what needs servicing is right at the top.
+const sortedVehicles = computed(() => [...vehicles.value].sort((a, b) => needScore(b) - needScore(a)))
+
 onMounted(() => load().catch((e) => toast.error(apiError(e))))
 </script>
 
@@ -209,7 +237,8 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
 
     <!-- Fleet -->
     <div v-if="tab === 'fleet'" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-      <div v-for="v in vehicles" :key="v.id" class="glass p-4">
+      <div v-for="v in sortedVehicles" :key="v.id" class="glass p-4"
+        :class="needScore(v) > 40 ? 'ring-1 ring-loss/40' : (needScore(v) > 15 ? 'ring-1 ring-gold/30' : '')">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <span>{{ MODE_ICON[v.model?.mode ?? 'road'] }}</span>
@@ -218,6 +247,12 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
           <span class="chip capitalize" :class="statusChip[v.status]">{{ v.status.replace('_', ' ') }}</span>
         </div>
         <p class="text-[11px] text-slate-400 mt-0.5">{{ v.nickname || v.model?.brand }} · {{ v.city?.name }} · {{ num(v.odometer) }} km</p>
+
+        <!-- What this vehicle needs, at a glance -->
+        <p v-if="needSummary(v)" class="mt-2 text-[11px] font-medium flex items-center gap-1"
+          :class="needScore(v) > 40 ? 'text-loss' : 'text-gold'">
+          <span>🛠</span> Needs: {{ needSummary(v) }}
+        </p>
 
         <div class="mt-3 space-y-2">
           <div>
@@ -273,12 +308,12 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
           </div>
           <div class="flex gap-1.5 mb-2">
             <button v-if="(v.fuel_capacity ?? 0) > 0" class="btn-ghost !py-1 !px-2 text-[11px] flex-1" :disabled="working === v.id || v.status === 'en_route'" @click="refuel(v)">⛽ Refuel</button>
-            <button class="btn-ghost !py-1 !px-2 text-[11px] flex-1" :disabled="working === v.id || v.status === 'en_route'" @click="repair(v)">🔧 Repair</button>
+            <button class="btn-ghost !py-1 !px-2 text-[11px] flex-1" :class="needs(v).repair && 'ring-1 ring-gold/60'" :disabled="working === v.id || v.status === 'en_route'" @click="repair(v)">🔧 Repair</button>
           </div>
-          <!-- Service centre -->
+          <!-- Service centre: oil & other services, each flagged when due -->
           <div class="grid grid-cols-4 gap-1.5 mb-2">
-            <button class="btn-ghost !py-1 text-[10px]" :disabled="working === v.id || v.status === 'en_route'" @click="service(v, 'oil')">🛢 Oil</button>
-            <button class="btn-ghost !py-1 text-[10px]" :disabled="working === v.id || v.status === 'en_route'" @click="service(v, 'battery')">🔋 Batt</button>
+            <button class="btn-ghost !py-1 text-[10px]" :class="needs(v).oil && 'ring-1 ring-gold/60'" :disabled="working === v.id || v.status === 'en_route'" @click="service(v, 'oil')">🛢 Oil</button>
+            <button class="btn-ghost !py-1 text-[10px]" :class="needs(v).battery && 'ring-1 ring-gold/60'" :disabled="working === v.id || v.status === 'en_route'" @click="service(v, 'battery')">🔋 Batt</button>
             <button class="btn-ghost !py-1 text-[10px]" :class="!v.is_insured && 'ring-1 ring-loss/50'" :disabled="working === v.id" @click="service(v, 'insurance')">🛡 Insure</button>
             <button class="btn-ghost !py-1 text-[10px]" :class="!v.is_registered && 'ring-1 ring-loss/50'" :disabled="working === v.id" @click="service(v, 'registration')">📋 Reg</button>
           </div>
