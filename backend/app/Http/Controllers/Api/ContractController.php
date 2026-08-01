@@ -106,7 +106,13 @@ class ContractController extends Controller
         // NOW — so a small free truck sees the light loads it can actually
         // dispatch, not heavy jobs only a bigger truck (still en route) could do.
         if ($wantHaulable) {
-            $contracts = $contracts->filter(fn (Contract $c) => $this->haulableBy($c, $idleFleet));
+            // Trailers a tractor could actually attach right now (idle & healthy).
+            $availableTrailers = Trailer::where('company_id', $company->id)
+                ->where('status', Trailer::STATUS_IDLE)
+                ->where('condition', '>', 10)
+                ->with('model')->get();
+
+            $contracts = $contracts->filter(fn (Contract $c) => $this->haulableBy($c, $idleFleet, $availableTrailers));
         }
 
         // Flag jobs starting where a truck is (idle) or is heading (arriving).
@@ -190,16 +196,29 @@ class ContractController extends Controller
      * only offers trucks at the origin) means the board never shows a job that
      * would then say "no compatible idle vehicle".
      */
-    private function haulableBy(Contract $contract, Collection $fleet): bool
+    private function haulableBy(Contract $contract, Collection $fleet, Collection $trailers = null): bool
     {
+        $trailers ??= collect();
         $commodity = $contract->commodity;
         $weight = $commodity->weight_per_unit * $contract->units;
         $volume = $commodity->volume_per_unit * $contract->units;
 
-        return $fleet->contains(function (Vehicle $v) use ($contract, $commodity, $weight, $volume) {
-            return $v->city_id === $contract->origin_city_id
-                && $commodity->canBeCarriedBy($v->model)
-                && $weight <= $v->effectiveCapacityWeight() + 0.001
+        return $fleet->contains(function (Vehicle $v) use ($contract, $commodity, $weight, $volume, $trailers) {
+            if ($v->city_id !== $contract->origin_city_id || ! $commodity->canBeCarriedBy($v->model)) {
+                return false;
+            }
+
+            // A tractor that needs a trailer can only haul this if the company
+            // actually has a matching, available trailer whose capacity fits —
+            // otherwise the job can't be dispatched and shouldn't be listed.
+            if ($v->model->needs_trailer) {
+                return $trailers->contains(fn (Trailer $t) => $t->model
+                    && $t->model->canCarry($commodity)
+                    && $weight <= $t->model->capacity_weight + 0.001
+                    && $volume <= $t->model->capacity_volume + 0.001);
+            }
+
+            return $weight <= $v->effectiveCapacityWeight() + 0.001
                 && $volume <= $v->effectiveCapacityVolume() + 0.001;
         });
     }
