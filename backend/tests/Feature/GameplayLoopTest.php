@@ -337,6 +337,40 @@ class GameplayLoopTest extends TestCase
         $this->assertCount(0, $achievements->check($company->fresh()));
     }
 
+    public function test_contract_dispatch_endpoint_claims_and_rolls_in_one_step(): void
+    {
+        $token = $this->postJson('/api/register', [
+            'name' => 'Quick', 'email' => 'quick@transoria.io', 'password' => 'password123',
+            'company_name' => 'Quick Freight',
+        ])->json('token');
+
+        $company = \App\Models\User::where('email', 'quick@transoria.io')->first()->company;
+        $vehicle = $company->vehicles()->with('model')->first();
+        $driver = $company->drivers()->first();
+        $hq = $company->headquarters_city_id;
+
+        // Find an OPEN market contract the starter van can haul.
+        $contract = null;
+        for ($i = 0; $i < 10 && ! $contract; $i++) {
+            $this->artisan('world:tick');
+            $contract = Contract::onMarket()->where('origin_city_id', $hq)->with('commodity')->get()
+                ->first(fn (Contract $c) => $this->fits($c, $vehicle));
+        }
+        $this->assertNotNull($contract);
+
+        // One call: claims the open contract AND dispatches against it.
+        $this->withToken($token)
+            ->postJson("/api/contracts/{$contract->id}/dispatch", [
+                'vehicle_id' => $vehicle->id,
+                'driver_id' => $driver->id,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'en_route');
+
+        $this->assertSame(Vehicle::STATUS_EN_ROUTE, $vehicle->fresh()->status);
+        $this->assertSame(Contract::STATUS_IN_PROGRESS, $contract->fresh()->status);
+    }
+
     public function test_garage_services_restore_health_and_renew_papers(): void
     {
         $user = User::factory()->create();

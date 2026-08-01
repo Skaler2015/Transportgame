@@ -2,23 +2,26 @@
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
-import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
-import type { Contract } from '../types'
+import type { Contract, Vehicle, Trailer, Driver } from '../types'
 import { credits, num } from '../utils/format'
 import CommodityBadge from '../components/CommodityBadge.vue'
 import DifficultyStars from '../components/DifficultyStars.vue'
 
 const game = useGameStore()
-const auth = useAuthStore()
 const toast = useToastStore()
 let poll: number | undefined
 
 const contracts = ref<Contract[]>([])
+const vehicles = ref<Vehicle[]>([])
+const trailers = ref<Trailer[]>([])
+const drivers = ref<Driver[]>([])
 const loading = ref(false)
 const accepting = ref<number | null>(null)
+const dispatching = ref<number | null>(null)
 const filters = ref({ origin_city_id: '', commodity_id: '', sort: 'payout' })
 const haulableOnly = ref(true)
+const selection = ref<Record<number, { vehicle_id: number | null; trailer_id: number | null; driver_id: number | null }>>({})
 
 const sortedCities = computed(() => [...game.cities].sort((a, b) => a.name.localeCompare(b.name)))
 
@@ -31,11 +34,64 @@ async function load(silent = false) {
     if (haulableOnly.value) params.haulable = '1'
     const { data } = await api.get('/contracts', { params })
     contracts.value = data.data
+    for (const c of contracts.value) {
+      if (!selection.value[c.id]) selection.value[c.id] = { vehicle_id: null, trailer_id: null, driver_id: null }
+    }
   } catch (e) {
-    if (!silent) toast.error(apiError(e)) // stay quiet on background refreshes
+    if (!silent) toast.error(apiError(e))
   } finally {
     loading.value = false
   }
+}
+
+async function loadFleet() {
+  const [f, tr, d] = await Promise.allSettled([api.get('/fleet'), api.get('/trailers'), api.get('/drivers')])
+  if (f.status === 'fulfilled') vehicles.value = f.value.data.data
+  if (tr.status === 'fulfilled') trailers.value = tr.value.data.data
+  if (d.status === 'fulfilled') drivers.value = d.value.data.data
+}
+
+// ---- compatibility (mirrors Operations) -----------------------------------
+function modeOk(v: Vehicle, c: Contract): boolean {
+  const mode = v.model?.mode ?? 'road'
+  if (mode === 'sea') return !!(c.origin?.has_port && c.destination?.has_port)
+  if (mode === 'air') return !!(c.origin?.has_airport && c.destination?.has_airport)
+  return true
+}
+function vehicleSelfHauls(v: Vehicle, c: Contract): boolean {
+  const m = v.model, com = c.commodity
+  if (!m || !com) return false
+  if (com.requires_reefer && !m.can_reefer) return false
+  if (com.requires_tanker && !m.can_tanker) return false
+  if (com.is_hazardous && !m.can_hazmat) return false
+  return m.capacity_weight >= (c.total_weight ?? 0) && m.capacity_volume >= (c.total_volume ?? 0)
+}
+function compatibleVehicles(c: Contract): Vehicle[] {
+  return vehicles.value.filter((v) => v.available && v.model && modeOk(v, c) && (v.model.needs_trailer ? true : vehicleSelfHauls(v, c)))
+}
+function trailerCarries(t: Trailer, c: Contract): boolean {
+  const m = t.model, com = c.commodity
+  if (!m || !com) return false
+  if (com.requires_reefer && !m.can_reefer) return false
+  if (com.requires_tanker && !m.can_tanker) return false
+  if (com.is_hazardous && !m.can_hazmat) return false
+  return m.capacity_weight >= (c.total_weight ?? 0) && m.capacity_volume >= (c.total_volume ?? 0)
+}
+function compatibleTrailers(c: Contract): Trailer[] {
+  return trailers.value.filter((t) => t.available && trailerCarries(t, c))
+}
+function compatibleDrivers(c: Contract): Driver[] {
+  return drivers.value.filter((d) => d.available && (!c.commodity?.is_hazardous || d.hazmat_licence))
+}
+function selectedVehicle(c: Contract): Vehicle | undefined {
+  return vehicles.value.find((v) => v.id === selection.value[c.id]?.vehicle_id)
+}
+function needsTrailer(c: Contract): boolean {
+  return !!selectedVehicle(c)?.model?.needs_trailer
+}
+function canDispatch(c: Contract): boolean {
+  const sel = selection.value[c.id]
+  return !!sel?.vehicle_id && !!sel?.driver_id && (!needsTrailer(c) || !!sel?.trailer_id)
 }
 
 async function accept(c: Contract) {
@@ -43,7 +99,7 @@ async function accept(c: Contract) {
   try {
     await api.post(`/contracts/${c.id}/accept`)
     contracts.value = contracts.value.filter((x) => x.id !== c.id)
-    toast.success('Contract claimed. Dispatch a truck from Operations.')
+    toast.success('Contract claimed. Dispatch it from Operations.')
     game.refreshDashboard().catch(() => {})
   } catch (e) {
     toast.error(apiError(e))
@@ -52,10 +108,33 @@ async function accept(c: Contract) {
   }
 }
 
+async function dispatchNow(c: Contract) {
+  const sel = selection.value[c.id]
+  if (!sel?.vehicle_id || !sel?.driver_id) return toast.error('Pick a vehicle and a driver first.')
+  if (needsTrailer(c) && !sel.trailer_id) return toast.error('This tractor needs a trailer — attach one.')
+  dispatching.value = c.id
+  try {
+    await api.post(`/contracts/${c.id}/dispatch`, {
+      vehicle_id: sel.vehicle_id,
+      trailer_id: needsTrailer(c) ? sel.trailer_id : null,
+      driver_id: sel.driver_id,
+    })
+    toast.success('Dispatched! Truck is rolling.')
+    contracts.value = contracts.value.filter((x) => x.id !== c.id)
+    await loadFleet()
+    load(true)
+    game.refreshDashboard().catch(() => {})
+  } catch (e) {
+    toast.error(apiError(e))
+  } finally {
+    dispatching.value = null
+  }
+}
+
 onMounted(async () => {
   await game.loadReference().catch(() => {})
+  await loadFleet().catch(() => {})
   load()
-  // Keep the market fresh — new contracts are minted every world tick.
   poll = window.setInterval(() => load(true), 15000)
 })
 onUnmounted(() => clearInterval(poll))
@@ -66,7 +145,7 @@ onUnmounted(() => clearInterval(poll))
     <div class="flex items-end justify-between flex-wrap gap-3">
       <div>
         <h1 class="text-2xl font-bold">Contract Market</h1>
-        <p class="text-slate-400 text-sm">Open haulage jobs across {{ auth.company?.country_name || 'your country' }}. Auto-refreshes as new jobs appear.</p>
+        <p class="text-slate-400 text-sm">Claim a job and dispatch it right here. Auto-refreshes as new jobs appear.</p>
       </div>
     </div>
 
@@ -132,12 +211,39 @@ onUnmounted(() => clearInterval(poll))
           </div>
         </div>
 
+        <!-- Inline dispatch: pick vehicle + (trailer) + driver, then GO -->
+        <div class="mt-3 space-y-1.5 pt-3 border-t border-white/5">
+          <select v-model="selection[c.id].vehicle_id" class="input !py-1.5 text-xs">
+            <option :value="null" disabled>Choose vehicle…</option>
+            <option v-for="v in compatibleVehicles(c)" :key="v.id" :value="v.id">
+              {{ v.nickname || v.model?.name }} · fuel {{ Math.round(v.fuel_pct ?? 100) }}%
+            </option>
+          </select>
+          <select v-if="needsTrailer(c)" v-model="selection[c.id].trailer_id" class="input !py-1.5 text-xs">
+            <option :value="null" disabled>Attach trailer…</option>
+            <option v-for="t in compatibleTrailers(c)" :key="t.id" :value="t.id">{{ t.model?.name }}</option>
+          </select>
+          <select v-model="selection[c.id].driver_id" class="input !py-1.5 text-xs">
+            <option :value="null" disabled>Choose driver…</option>
+            <option v-for="d in compatibleDrivers(c)" :key="d.id" :value="d.id">{{ d.name }} · skill {{ d.skill }}</option>
+          </select>
+        </div>
+
         <div class="flex items-center justify-between mt-3">
-          <span class="text-[11px] text-slate-400">+{{ c.reputation_reward }} rep</span>
-          <button class="btn-primary !py-1.5 !px-4" :disabled="accepting === c.id" @click="accept(c)">
-            {{ accepting === c.id ? '…' : 'Claim' }}
+          <button class="text-[11px] text-slate-400 hover:text-slate-200" :disabled="accepting === c.id" @click="accept(c)">
+            {{ accepting === c.id ? '…' : 'Claim for later' }}
+          </button>
+          <button
+            class="btn-primary !py-1.5 !px-4"
+            :disabled="dispatching === c.id || !canDispatch(c)"
+            @click="dispatchNow(c)"
+          >
+            {{ dispatching === c.id ? '…' : 'GO →' }}
           </button>
         </div>
+        <p v-if="!compatibleVehicles(c).length" class="text-[10px] text-loss mt-1">No compatible idle vehicle.</p>
+        <p v-else-if="needsTrailer(c) && !compatibleTrailers(c).length" class="text-[10px] text-loss mt-1">Needs a matching trailer — buy one in Fleet.</p>
+        <p v-else-if="!compatibleDrivers(c).length" class="text-[10px] text-loss mt-1">No available driver — rest or hire crew.</p>
       </div>
     </div>
 

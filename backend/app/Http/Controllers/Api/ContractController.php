@@ -5,14 +5,19 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Concerns\ResolvesCompany;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ContractResource;
+use App\Http\Resources\ShipmentResource;
 use App\Models\Contract;
+use App\Models\Driver;
+use App\Models\Trailer;
 use App\Models\Vehicle;
 use App\Models\WorldEvent;
 use App\Services\CompanyService;
 use App\Services\EconomyService;
+use App\Services\ShipmentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
@@ -20,7 +25,10 @@ class ContractController extends Controller
 {
     use ResolvesCompany;
 
-    public function __construct(private readonly CompanyService $companies) {}
+    public function __construct(
+        private readonly CompanyService $companies,
+        private readonly ShipmentService $shipments,
+    ) {}
 
     /** The open contract market, filterable and sortable. */
     public function index(Request $request)
@@ -135,5 +143,43 @@ class ContractController extends Controller
         }
 
         return new ContractResource($accepted);
+    }
+
+    /** Claim an open contract AND dispatch a truck against it in one action. */
+    public function dispatch(Request $request, Contract $contract)
+    {
+        $company = $this->company($request);
+
+        $data = $request->validate([
+            'vehicle_id' => ['required', 'integer'],
+            'driver_id' => ['required', 'integer'],
+            'trailer_id' => ['nullable', 'integer'],
+        ]);
+
+        $vehicle = Vehicle::where('id', $data['vehicle_id'])->where('company_id', $company->id)->firstOrFail();
+        $driver = Driver::where('id', $data['driver_id'])->where('company_id', $company->id)->firstOrFail();
+        $trailer = ! empty($data['trailer_id'])
+            ? Trailer::where('id', $data['trailer_id'])->where('company_id', $company->id)->firstOrFail()
+            : null;
+
+        try {
+            $shipment = DB::transaction(function () use ($company, $contract, $vehicle, $driver, $trailer) {
+                if ($contract->status === Contract::STATUS_OPEN) {
+                    $this->companies->acceptContract($company, $contract);
+                    $contract->refresh();
+                }
+                if ($contract->company_id !== $company->id || $contract->status !== Contract::STATUS_ACCEPTED) {
+                    throw new RuntimeException('This contract is no longer available.');
+                }
+
+                return $this->shipments->dispatch($company, $contract, $vehicle, $driver, $trailer);
+            });
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return (new ShipmentResource(
+            $shipment->load(['contract.commodity', 'contract.origin', 'contract.destination', 'vehicle.model', 'trailer.model', 'driver'])
+        ))->response()->setStatusCode(201);
     }
 }
