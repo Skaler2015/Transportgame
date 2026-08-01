@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
@@ -203,6 +203,21 @@ async function dispatch(c: Contract) {
 const statusStyle: Record<string, string> = {
   delivered: 'text-gain', late: 'text-gold', failed: 'text-loss',
 }
+
+// The instant a shipment's ETA passes, settle it and refresh — no wait for the
+// poll: the delivered truck frees up and its next jobs appear automatically.
+const arrivedHandled = new Set<number>()
+watch(now, () => {
+  const due = shipments.value.filter(
+    (s) => s.status === 'en_route'
+      && new Date(s.eta_at).getTime() <= now.value
+      && !arrivedHandled.has(s.id),
+  )
+  if (!due.length) return
+  due.forEach((s) => arrivedHandled.add(s.id))
+  loadAll().catch(() => {})
+  game.refreshDashboard().catch(() => {})
+})
 
 onMounted(async () => {
   await game.loadReference().catch(() => {})

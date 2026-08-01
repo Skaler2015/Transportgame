@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
@@ -108,6 +108,24 @@ function etaLeft(s: Shipment): string {
   const sec = secs % 60
   return m ? `${m}m ${sec}s` : `${sec}s`
 }
+
+// The instant a shipment's ETA passes, settle it and refresh the board — no
+// manual refresh needed: the delivered truck frees up and its next jobs appear.
+const arrivedHandled = new Set<number>()
+watch(now, () => {
+  const due = shipments.value.filter(
+    (s) => s.status === 'en_route'
+      && new Date(s.eta_at).getTime() <= now.value
+      && !arrivedHandled.has(s.id),
+  )
+  if (!due.length) return
+  due.forEach((s) => arrivedHandled.add(s.id))
+  // Hitting /shipments settles due deliveries server-side (self-healing).
+  loadShipments()
+  loadFleet().catch(() => {})
+  load(true)
+  game.refreshDashboard().catch(() => {})
+})
 // Free (idle) vehicles and where they're parked.
 const freeVehicles = computed(() => vehicles.value.filter((v) => v.available))
 
