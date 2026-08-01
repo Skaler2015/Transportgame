@@ -24,6 +24,8 @@ class Company extends Model
         'guild_contribution' => 'integer',
         'last_tick_at' => 'datetime',
         'missions_generated_at' => 'datetime',
+        'onboarded_at' => 'datetime',
+        'tutorial_step' => 'integer',
     ];
 
     // XP required to reach the NEXT level from the given level.

@@ -54,6 +54,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/company', [CompanyController::class, 'show']);
     Route::post('/company/country', [CompanyController::class, 'updateCountry']);
     Route::post('/company/reset', [CompanyController::class, 'reset']);
+    Route::post('/company/tutorial', [CompanyController::class, 'tutorial']);
     Route::get('/dashboard', [CompanyController::class, 'dashboard']);
     Route::get('/ledger', [CompanyController::class, 'ledger']);
 

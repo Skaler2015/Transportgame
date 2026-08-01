@@ -98,6 +98,17 @@ class WorldSync extends Command
             ->count();
         $this->info("Topped up {$fuelled} empty tanks.");
 
+        // 5. Established companies skip the new welcome tutorial; brand-new ones
+        //    (no activity yet) keep it. Idempotent across deploys.
+        $onboarded = Company::whereNull('onboarded_at')
+            ->where(function ($q) {
+                $q->where('shipments_completed', '>', 0)
+                    ->orWhere('level', '>', 1)
+                    ->orWhere('lifetime_revenue', '>', 0);
+            })
+            ->update(['onboarded_at' => now()]);
+        $this->info("Marked {$onboarded} established companies as onboarded.");
+
         $this->info('World sync complete.');
 
         return self::SUCCESS;

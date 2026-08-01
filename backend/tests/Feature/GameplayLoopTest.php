@@ -266,6 +266,32 @@ class GameplayLoopTest extends TestCase
         $this->assertSame(Vehicle::STATUS_EN_ROUTE, $vehicle->fresh()->status);
     }
 
+    public function test_registration_accepts_brand_colour_and_hq_and_tutorial_completes(): void
+    {
+        $city = \App\Models\City::where('country', 'IN')->where('unlock_level', 1)->first();
+
+        $resp = $this->postJson('/api/register', [
+            'name' => 'Founder',
+            'email' => 'founder@transoria.io',
+            'password' => 'password123',
+            'company_name' => 'Custom Co',
+            'country' => 'IN',
+            'headquarters_city_id' => $city->id,
+            'logo_color' => '#a78bfa',
+        ]);
+
+        $resp->assertCreated()
+            ->assertJsonPath('company.logo_color', '#a78bfa')
+            ->assertJsonPath('company.headquarters.id', $city->id)
+            ->assertJsonPath('company.onboarded_at', null); // fresh players see the tutorial
+
+        $token = $resp->json('token');
+
+        $done = $this->withToken($token)->postJson('/api/company/tutorial', ['done' => true]);
+        $done->assertOk();
+        $this->assertNotNull($done->json('data.onboarded_at'));
+    }
+
     public function test_buy_trailer_endpoint_returns_the_purchased_trailer(): void
     {
         // Exercises the full HTTP path incl. ->load('model','city') + resource

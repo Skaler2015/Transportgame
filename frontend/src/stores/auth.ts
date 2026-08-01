@@ -20,11 +20,25 @@ export const useAuthStore = defineStore('auth', () => {
     setCurrencySymbol((c as any)?.currency?.symbol)
   }
 
-  async function register(payload: { name: string; email: string; password: string; company_name: string; country?: string }) {
+  async function register(payload: {
+    name: string
+    email: string
+    password: string
+    company_name: string
+    country?: string
+    headquarters_city_id?: number | null
+    logo_color?: string
+  }) {
     const { data } = await api.post('/register', payload)
     setToken(data.token)
     user.value = data.user
     applyCompany(data.company)
+  }
+
+  /** Persist tutorial progress (and completion) to the server. */
+  async function updateTutorial(payload: { step?: number; done?: boolean }) {
+    const { data } = await api.post('/company/tutorial', payload)
+    applyCompany(data.data)
   }
 
   async function login(payload: { email: string; password: string }) {
@@ -67,5 +81,5 @@ export const useAuthStore = defineStore('auth', () => {
     applyCompany(c)
   }
 
-  return { user, company, ready, register, login, fetchMe, bootstrap, logout, setCompany }
+  return { user, company, ready, register, login, fetchMe, bootstrap, logout, setCompany, updateTutorial }
 })

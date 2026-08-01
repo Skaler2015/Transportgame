@@ -6,6 +6,7 @@ import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
 import { credits, num } from '../utils/format'
 import { apiError } from '../api/client'
+import TutorialCoach from '../components/TutorialCoach.vue'
 
 const auth = useAuthStore()
 const game = useGameStore()
@@ -181,6 +182,9 @@ async function logout() {
         <div class="lg:hidden" style="height: calc(4.75rem + env(safe-area-inset-bottom))" />
       </main>
     </div>
+
+    <!-- One-time welcome walkthrough for brand-new companies -->
+    <TutorialCoach />
 
     <!-- Mobile bottom tab bar (hidden on lg where the sidebar shows).
          Teleported to <body> so `position: fixed` is relative to the viewport

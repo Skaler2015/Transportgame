@@ -38,21 +38,45 @@ class CompanyService
     ) {}
 
     /** Found a new company for a user with the starter loadout in a country. */
-    public function found(User $user, string $companyName, ?string $country = null): Company
-    {
+    public function found(
+        User $user,
+        string $companyName,
+        ?string $country = null,
+        ?int $headquartersCityId = null,
+        ?string $logoColor = null,
+    ): Company {
         $country = $this->normaliseCountry($country);
-        $hq = $this->pickHq($country);
+
+        // Honour a chosen HQ if it's a real city in the company's country,
+        // otherwise fall back to a sensible starter city.
+        $hq = null;
+        if ($headquartersCityId) {
+            $hq = City::where('id', $headquartersCityId)->where('country', $country)->first();
+        }
+        $hq ??= $this->pickHq($country);
+
+        $logoColor = $this->normaliseHexColor($logoColor) ?? '#'.substr(md5($companyName), 0, 6);
 
         $company = Company::create(array_merge([
             'user_id' => $user->id,
             'name' => $companyName,
             'slug' => $this->uniqueSlug($companyName),
-            'logo_color' => '#'.substr(md5($companyName), 0, 6),
+            'logo_color' => $logoColor,
         ], $this->starterColumns($country, $hq)));
 
         $this->grantStarterAssets($company, $hq);
 
         return $company->fresh(['vehicles', 'drivers', 'headquarters']);
+    }
+
+    /** Validate a "#rrggbb" colour; return normalised value or null. */
+    private function normaliseHexColor(?string $color): ?string
+    {
+        if ($color && preg_match('/^#[0-9a-fA-F]{6}$/', $color)) {
+            return strtolower($color);
+        }
+
+        return null;
     }
 
     /**

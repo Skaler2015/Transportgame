@@ -108,6 +108,27 @@ class CompanyController extends Controller
         ]);
     }
 
+    /** Advance or finish the welcome tutorial. */
+    public function tutorial(Request $request)
+    {
+        $company = $this->company($request);
+
+        $data = $request->validate([
+            'step' => ['nullable', 'integer', 'min:0', 'max:50'],
+            'done' => ['nullable', 'boolean'],
+        ]);
+
+        if (array_key_exists('step', $data) && $data['step'] !== null) {
+            $company->tutorial_step = $data['step'];
+        }
+        if (! empty($data['done'])) {
+            $company->onboarded_at = now();
+        }
+        $company->save();
+
+        return new CompanyResource($company->loadCount('vehicles', 'drivers')->load('headquarters'));
+    }
+
     /** Wipe the company's progress and start fresh (keeps the login). */
     public function reset(Request $request)
     {

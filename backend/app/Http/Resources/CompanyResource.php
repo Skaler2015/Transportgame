@@ -37,6 +37,8 @@ class CompanyResource extends JsonResource
             'headquarters' => new CityResource($this->whenLoaded('headquarters')),
             'fleet_size' => $this->whenCounted('vehicles'),
             'driver_count' => $this->whenCounted('drivers'),
+            'onboarded_at' => $this->onboarded_at?->toIso8601String(),
+            'tutorial_step' => (int) $this->tutorial_step,
         ];
     }
 }

@@ -58,6 +58,8 @@ export interface Company {
   headquarters?: City
   fleet_size?: number
   driver_count?: number
+  onboarded_at?: string | null
+  tutorial_step?: number
 }
 
 export interface VehicleModel {

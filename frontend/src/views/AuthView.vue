@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
@@ -11,8 +11,26 @@ const router = useRouter()
 
 const mode = ref<'login' | 'register'>('register')
 const busy = ref(false)
-const form = ref({ name: '', email: '', password: '', company_name: '', country: 'IN' })
+const step = ref(1) // register wizard: 1 account · 2 company · 3 base
+const form = ref({
+  name: '',
+  email: '',
+  password: '',
+  company_name: '',
+  country: 'IN',
+  headquarters_city_id: null as number | null,
+  logo_color: '#38bdf8',
+})
+
 const countries = ref<{ code: string; name: string }[]>([])
+const cities = ref<{ id: number; name: string; region?: string }[]>([])
+
+const BRAND_COLORS = [
+  '#38bdf8', '#22d3ee', '#a78bfa', '#f472b6', '#fb7185',
+  '#fbbf24', '#34d399', '#60a5fa', '#f97316', '#e2e8f0',
+]
+
+const companyInitial = computed(() => (form.value.company_name || 'T').charAt(0).toUpperCase())
 
 onMounted(async () => {
   try {
@@ -21,18 +39,56 @@ onMounted(async () => {
   } catch {
     countries.value = [{ code: 'IN', name: 'India' }]
   }
+  loadCities()
 })
 
-async function submit() {
+async function loadCities() {
+  try {
+    const { data } = await api.get('/world/cities', { params: { country: form.value.country } })
+    cities.value = data.data
+    // Default HQ to the first city if none picked / not in this country.
+    if (!cities.value.find((c) => c.id === form.value.headquarters_city_id)) {
+      form.value.headquarters_city_id = cities.value[0]?.id ?? null
+    }
+  } catch {
+    cities.value = []
+  }
+}
+watch(() => form.value.country, loadCities)
+
+function nextStep() {
+  if (step.value === 1) {
+    if (!form.value.name || !form.value.email || form.value.password.length < 8) {
+      return toast.error('Fill your name, email and an 8+ character password.')
+    }
+  }
+  if (step.value === 2 && !form.value.company_name) {
+    return toast.error('Give your company a name.')
+  }
+  step.value = Math.min(3, step.value + 1)
+}
+function prevStep() {
+  step.value = Math.max(1, step.value - 1)
+}
+
+async function submitRegister() {
   busy.value = true
   try {
-    if (mode.value === 'register') {
-      await auth.register(form.value)
-      toast.success(`Welcome to Transoria, ${auth.company?.name}!`)
-    } else {
-      await auth.login({ email: form.value.email, password: form.value.password })
-      toast.success('Welcome back, dispatcher.')
-    }
+    await auth.register(form.value)
+    toast.success(`Welcome to Transoria, ${auth.company?.name}!`)
+    router.push({ name: 'dashboard' })
+  } catch (e) {
+    toast.error(apiError(e))
+  } finally {
+    busy.value = false
+  }
+}
+
+async function submitLogin() {
+  busy.value = true
+  try {
+    await auth.login({ email: form.value.email, password: form.value.password })
+    toast.success('Welcome back, dispatcher.')
     router.push({ name: 'dashboard' })
   } catch (e) {
     toast.error(apiError(e))
@@ -91,7 +147,7 @@ const features = [
           <button
             class="flex-1 py-2 rounded-lg text-sm font-semibold transition"
             :class="mode === 'register' ? 'bg-brand text-ink-950' : 'text-slate-400'"
-            @click="mode = 'register'"
+            @click="mode = 'register'; step = 1"
           >Found a Company</button>
           <button
             class="flex-1 py-2 rounded-lg text-sm font-semibold transition"
@@ -100,42 +156,114 @@ const features = [
           >Sign In</button>
         </div>
 
-        <form class="space-y-4" @submit.prevent="submit">
-          <template v-if="mode === 'register'">
+        <!-- REGISTER WIZARD -->
+        <template v-if="mode === 'register'">
+          <!-- Step indicator -->
+          <div class="flex items-center gap-2 mb-6">
+            <template v-for="s in 3" :key="s">
+              <div
+                class="h-1.5 flex-1 rounded-full transition-colors"
+                :class="s <= step ? 'bg-brand' : 'bg-ink-700'"
+              />
+            </template>
+          </div>
+
+          <!-- Step 1: account -->
+          <div v-if="step === 1" class="space-y-4">
+            <p class="text-sm text-slate-400">Step 1 · Your account</p>
             <div>
               <label class="stat-label">Your Name</label>
-              <input v-model="form.name" class="input mt-1" placeholder="Alex Dispatcher" required />
+              <input v-model="form.name" class="input mt-1" placeholder="Alex Dispatcher" />
             </div>
             <div>
-              <label class="stat-label">Company Name</label>
-              <input v-model="form.company_name" class="input mt-1" placeholder="Skyline Freightways" required />
+              <label class="stat-label">Email</label>
+              <input v-model="form.email" type="email" class="input mt-1" placeholder="you@transoria.io" />
             </div>
+            <div>
+              <label class="stat-label">Password</label>
+              <input v-model="form.password" type="password" class="input mt-1" placeholder="••••••••" />
+            </div>
+            <button class="btn-primary w-full !py-2.5" @click="nextStep">Continue →</button>
+          </div>
+
+          <!-- Step 2: company + brand -->
+          <div v-else-if="step === 2" class="space-y-4">
+            <p class="text-sm text-slate-400">Step 2 · Your company</p>
+            <div class="flex items-center gap-3">
+              <div
+                class="h-14 w-14 rounded-2xl shrink-0 grid place-items-center font-black text-ink-950 text-2xl shadow-lg"
+                :style="{ background: form.logo_color }"
+              >{{ companyInitial }}</div>
+              <div class="flex-1">
+                <label class="stat-label">Company Name</label>
+                <input v-model="form.company_name" class="input mt-1" placeholder="Skyline Freightways" />
+              </div>
+            </div>
+            <div>
+              <label class="stat-label">Brand colour</label>
+              <div class="flex flex-wrap gap-2 mt-2">
+                <button
+                  v-for="c in BRAND_COLORS"
+                  :key="c"
+                  type="button"
+                  class="h-8 w-8 rounded-lg transition ring-2"
+                  :style="{ background: c }"
+                  :class="form.logo_color === c ? 'ring-white scale-110' : 'ring-transparent'"
+                  @click="form.logo_color = c"
+                />
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn-ghost" @click="prevStep">← Back</button>
+              <button class="btn-primary flex-1 !py-2.5" @click="nextStep">Continue →</button>
+            </div>
+          </div>
+
+          <!-- Step 3: base of operations -->
+          <div v-else class="space-y-4">
+            <p class="text-sm text-slate-400">Step 3 · Base of operations</p>
             <div>
               <label class="stat-label">Country</label>
               <select v-model="form.country" class="input mt-1">
                 <option v-for="c in countries" :key="c.code" :value="c.code">{{ c.name }}</option>
               </select>
-              <p class="text-[11px] text-slate-500 mt-1">You'll operate in this country's cities.</p>
             </div>
-          </template>
+            <div>
+              <label class="stat-label">Headquarters city</label>
+              <select v-model="form.headquarters_city_id" class="input mt-1">
+                <option v-for="c in cities" :key="c.id" :value="c.id">
+                  {{ c.name }}<template v-if="c.region"> · {{ c.region }}</template>
+                </option>
+              </select>
+              <p class="text-[11px] text-slate-500 mt-1">Your first garage and truck start here.</p>
+            </div>
+            <div class="rounded-xl bg-ink-900/60 p-3 text-[11px] text-slate-400">
+              You'll start with <span class="text-gold">₹250,000</span>, a garage, a mini-hauler,
+              a starter trailer and a driver.
+            </div>
+            <div class="flex gap-2">
+              <button class="btn-ghost" @click="prevStep">← Back</button>
+              <button class="btn-primary flex-1 !py-2.5" :disabled="busy" @click="submitRegister">
+                {{ busy ? 'Launching…' : 'Launch Company →' }}
+              </button>
+            </div>
+          </div>
+        </template>
 
+        <!-- LOGIN -->
+        <form v-else class="space-y-4" @submit.prevent="submitLogin">
           <div>
             <label class="stat-label">Email</label>
             <input v-model="form.email" type="email" class="input mt-1" placeholder="you@transoria.io" required />
           </div>
           <div>
             <label class="stat-label">Password</label>
-            <input v-model="form.password" type="password" class="input mt-1" placeholder="••••••••" minlength="8" required />
+            <input v-model="form.password" type="password" class="input mt-1" placeholder="••••••••" required />
           </div>
-
           <button class="btn-primary w-full !py-2.5" :disabled="busy">
-            {{ busy ? 'Please wait…' : mode === 'register' ? 'Launch Company →' : 'Sign In →' }}
+            {{ busy ? 'Please wait…' : 'Sign In →' }}
           </button>
         </form>
-
-        <p v-if="mode === 'register'" class="text-[11px] text-slate-500 mt-4 text-center">
-          You'll start with 250,000 in cash, a garage, one mini-hauler and a driver.
-        </p>
       </div>
     </div>
   </div>
