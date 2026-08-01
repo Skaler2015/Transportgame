@@ -190,8 +190,13 @@ function needSummary(v: Vehicle): string {
   return [n.repair && 'repair', n.oil && 'oil', n.battery && 'battery', n.insurance && 'insurance', n.registration && 'registration']
     .filter(Boolean).join(' · ')
 }
-// Neediest trucks first, so what needs servicing is right at the top.
-const sortedVehicles = computed(() => [...vehicles.value].sort((a, b) => needScore(b) - needScore(a)))
+// Neediest trucks first — and among those, ones you can service NOW (not on the
+// road) float to the very top, so the list leads with actionable work.
+function sortKey(v: Vehicle): number {
+  const actionable = v.status !== 'en_route' && needSummary(v) !== ''
+  return needScore(v) + (actionable ? 1000 : 0)
+}
+const sortedVehicles = computed(() => [...vehicles.value].sort((a, b) => sortKey(b) - sortKey(a)))
 
 onMounted(() => load().catch((e) => toast.error(apiError(e))))
 </script>
@@ -249,9 +254,10 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
         <p class="text-[11px] text-slate-400 mt-0.5">{{ v.nickname || v.model?.brand }} · {{ v.city?.name }} · {{ num(v.odometer) }} km</p>
 
         <!-- What this vehicle needs, at a glance -->
-        <p v-if="needSummary(v)" class="mt-2 text-[11px] font-medium flex items-center gap-1"
+        <p v-if="needSummary(v)" class="mt-2 text-[11px] font-medium flex items-center gap-1 flex-wrap"
           :class="needScore(v) > 40 ? 'text-loss' : 'text-gold'">
           <span>🛠</span> Needs: {{ needSummary(v) }}
+          <span v-if="v.status === 'en_route'" class="text-slate-500 font-normal">· on the road, service when it arrives</span>
         </p>
 
         <div class="mt-3 space-y-2">
