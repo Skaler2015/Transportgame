@@ -261,6 +261,12 @@ const minTimeLeft = computed(() => {
   const first = onTheRoad.value[0]
   return first ? etaLeft(first) : '—'
 })
+// Crew at a glance: free (available), busy (driving), resting.
+const driverSummary = computed(() => ({
+  free: drivers.value.filter((d) => d.status === 'available').length,
+  busy: drivers.value.filter((d) => d.status === 'driving').length,
+  resting: drivers.value.filter((d) => d.status === 'resting').length,
+}))
 
 // Contract table: expand-to-dispatch drawer + client-side sort on any column.
 const expandedContract = ref<number | null>(null)
@@ -732,6 +738,14 @@ onUnmounted(() => clearInterval(poll))
           <span class="text-slate-400">Cash after these land</span>
           <span class="font-mono text-brand-soft font-semibold">{{ credits(projectedCash) }}</span>
         </div>
+        <div class="flex items-center justify-between col-span-2">
+          <span class="text-slate-400">Drivers</span>
+          <span class="font-mono font-semibold">
+            <span class="text-gain">{{ driverSummary.free }} free</span> ·
+            <span class="text-brand-soft">{{ driverSummary.busy }} busy</span> ·
+            <span class="text-slate-400">{{ driverSummary.resting }} rest</span>
+          </span>
+        </div>
       </div>
     </div>
 
@@ -946,6 +960,14 @@ onUnmounted(() => clearInterval(poll))
          <div class="flex items-center justify-between text-xs">
            <span class="text-slate-400">Longest still running</span>
            <span class="font-mono text-slate-200 font-semibold">⏱ {{ maxTimeLeft }}</span>
+         </div>
+         <div class="flex items-center justify-between text-xs border-t border-white/10 pt-1">
+           <span class="text-slate-400">Drivers</span>
+           <span class="font-mono font-semibold">
+             <span class="text-gain">{{ driverSummary.free }} free</span> ·
+             <span class="text-brand-soft">{{ driverSummary.busy }} busy</span> ·
+             <span class="text-slate-400">{{ driverSummary.resting }} resting</span>
+           </span>
          </div>
        </div>
 
