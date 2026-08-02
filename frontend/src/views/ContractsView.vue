@@ -517,7 +517,46 @@ async function dispatchNow(c: Contract) {
   }
 }
 
+// Persist the player's chosen filters/sort so the board opens the same way
+// next time. Saved locally on this device.
+const FILTER_STORE_KEY = 'transoria:contract-filters'
+const savedFilters = ref(false)
+function saveFilters() {
+  try {
+    localStorage.setItem(FILTER_STORE_KEY, JSON.stringify({
+      origin_city_id: filters.value.origin_city_id,
+      commodity_id: filters.value.commodity_id,
+      sort: dropdownSort.value,
+      hqOnly: hqOnly.value,
+      backhaulOnly: backhaulOnly.value,
+      haulableOnly: haulableOnly.value,
+    }))
+    savedFilters.value = true
+    toast.success('Filters saved — they’ll load automatically next time.')
+    window.setTimeout(() => { savedFilters.value = false }, 2000)
+  } catch { toast.error('Could not save filters on this device.') }
+}
+function loadSavedFilters(): boolean {
+  try {
+    const raw = localStorage.getItem(FILTER_STORE_KEY)
+    if (!raw) return false
+    const s = JSON.parse(raw)
+    filters.value.origin_city_id = s.origin_city_id ?? ''
+    filters.value.commodity_id = s.commodity_id ?? ''
+    dropdownSort.value = s.sort ?? 'eta'
+    hqOnly.value = !!s.hqOnly
+    backhaulOnly.value = s.backhaulOnly ?? true
+    haulableOnly.value = s.haulableOnly ?? true
+    // Mirror the sort into cSort + the server sort param.
+    cSort.value = { k: dropdownSort.value, dir: (['value', 'profit', 'permin'].includes(dropdownSort.value)) ? 'desc' : 'asc' }
+    filters.value.sort = (['value', 'profit', 'permin'].includes(dropdownSort.value)) ? 'payout'
+      : dropdownSort.value === 'diff' ? 'difficulty' : 'distance_km'
+    return true
+  } catch { return false }
+}
+
 onMounted(async () => {
+  loadSavedFilters()
   await game.loadReference().catch(() => {})
   await loadFleet().catch(() => {})
   loadShipments()
@@ -593,6 +632,9 @@ onUnmounted(() => clearInterval(poll))
             </select>
           </div>
           <button class="btn-ghost shrink-0" @click="load()">↻ Refresh</button>
+          <button class="btn-ghost shrink-0" :class="savedFilters ? '!text-gain !border-gain/40' : ''" @click="saveFilters">
+            {{ savedFilters ? '✓ Saved' : '💾 Save' }}
+          </button>
         </div>
       </div>
       <div class="flex flex-wrap gap-x-4 gap-y-1.5 sm:contents">
