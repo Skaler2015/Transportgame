@@ -21,9 +21,9 @@ const loading = ref(false)
 const accepting = ref<number | null>(null)
 const dispatching = ref<number | null>(null)
 const filters = ref({ origin_city_id: '', commodity_id: '', sort: 'distance_km' })
-// Mobile: filters start collapsed to save space; a toggle shows/hides them.
-// Desktop keeps them always open (CSS `sm:flex` wins over `hidden`).
-const filtersOpen = ref(false)
+// Filters can be hidden/shown on any screen. Start open on desktop, collapsed
+// on mobile to save space.
+const filtersOpen = ref(typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches)
 const activeFilterCount = computed(() =>
   (filters.value.origin_city_id ? 1 : 0)
   + (filters.value.commodity_id ? 1 : 0)
@@ -625,9 +625,10 @@ onUnmounted(() => clearInterval(poll))
          desktop. Body is a 2-col grid on mobile, flex row on ≥sm via
          `sm:contents` (the wrappers dissolve). -->
     <div class="glass p-3 sm:p-4">
-      <!-- Mobile toggle: show/hide the whole filter panel at will. -->
+      <!-- Show/hide the whole filter panel at will, on any screen. -->
       <button type="button"
-        class="sm:hidden w-full flex items-center justify-between gap-2"
+        class="w-full flex items-center justify-between gap-2"
+        :class="filtersOpen ? 'mb-3' : ''"
         @click="filtersOpen = !filtersOpen">
         <span class="text-sm font-semibold flex items-center gap-2">
           🔍 Filters
@@ -637,7 +638,7 @@ onUnmounted(() => clearInterval(poll))
       </button>
 
       <div :class="filtersOpen ? 'flex' : 'hidden'"
-        class="mt-3 sm:mt-0 flex-col gap-2.5 sm:flex sm:flex-row sm:flex-wrap sm:gap-3 sm:items-end">
+        class="flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:gap-3 sm:items-end">
       <div class="grid grid-cols-2 gap-2 sm:contents">
         <div class="sm:flex-1 sm:min-w-[160px]">
           <label class="stat-label">Origin</label>
