@@ -774,6 +774,10 @@ onUnmounted(() => clearInterval(poll))
             <span class="text-slate-400">{{ driverSummary.resting }} rest</span>
           </span>
         </div>
+        <div class="flex items-center justify-between col-span-2">
+          <span class="text-slate-400">Trucks</span>
+          <span class="font-mono"><span class="text-gain">{{ fleetStatus.idle }} idle</span> · <span class="text-brand-soft">{{ fleetStatus.enRoute }} out</span> · <span class="text-loss">{{ fleetStatus.maint }} shop</span> · {{ fleetStatus.util }}% util</span>
+        </div>
         <div v-if="today.revenue" class="flex items-center justify-between col-span-2">
           <span class="text-slate-400">Revenue today</span>
           <span class="font-mono text-gold font-semibold">{{ credits(today.revenue) }}</span>
@@ -798,7 +802,6 @@ onUnmounted(() => clearInterval(poll))
           <div class="flex items-center justify-between"><span class="text-slate-400">Avg left</span><span class="font-mono text-slate-200">⏱ {{ avgTimeLeft }}</span></div>
           <div class="flex items-center justify-between"><span class="text-slate-400">On road</span><span class="font-mono text-slate-200">{{ num(totalKmOnRoad) }}km</span></div>
           <div class="flex items-center justify-between"><span class="text-slate-400">Tonnage</span><span class="font-mono text-slate-200">{{ num(totalTonnageOnRoad, 1) }}t</span></div>
-          <div class="flex items-center justify-between col-span-2"><span class="text-slate-400">Trucks</span><span class="font-mono"><span class="text-gain">{{ fleetStatus.idle }} idle</span> · <span class="text-brand-soft">{{ fleetStatus.enRoute }} out</span> · <span class="text-loss">{{ fleetStatus.maint }} shop</span> · {{ fleetStatus.util }}% util</span></div>
           <div class="flex items-center justify-between col-span-2"><span class="text-slate-400">Trailers</span><span class="font-mono text-slate-200"><span class="text-gain">{{ trailerStatus.free }} free</span> · {{ trailerStatus.inUse }} in use</span></div>
           <div class="flex items-center justify-between col-span-2"><span class="text-slate-400">Delivered today</span><span class="font-mono"><span class="text-gain">{{ today.on_time }} ok</span> · <span class="text-gold">{{ today.late }} late</span> · <span class="text-loss">{{ today.failed }} fail</span> ({{ onTimePct }}%)</span></div>
           <div v-if="today.best_route" class="flex items-center justify-between col-span-2"><span class="text-slate-400">Best lane</span><span class="font-mono text-slate-200 truncate ml-2">{{ today.best_route.label }} · {{ credits(today.best_route.amount) }}</span></div>
