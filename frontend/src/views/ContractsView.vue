@@ -157,7 +157,12 @@ function needCost(v: Vehicle, need: string): number {
 }
 // Free vehicles that need any service — for the mobile alert banner, which
 // expands inline so a truck can be serviced right there (no scrolling away).
-const vehiclesNeedingFix = computed(() => freeVehicles.value.filter((v) => vehicleNeeds(v).length > 0))
+// Cheapest total repair on top, so the quickest wins to clear are first.
+const vehiclesNeedingFix = computed(() =>
+  freeVehicles.value
+    .filter((v) => vehicleNeeds(v).length > 0)
+    .sort((a, b) => vehicleFixTotal(a) - vehicleFixTotal(b)),
+)
 const serviceOpen = ref(false)
 // Total cost to fix one vehicle (sum of its needed services), and the grand
 // total to fix every free vehicle that needs service.
