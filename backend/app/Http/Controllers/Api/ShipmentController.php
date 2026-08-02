@@ -7,11 +7,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ShipmentResource;
 use App\Models\Contract;
 use App\Models\Driver;
+use App\Models\LedgerEntry;
 use App\Models\Shipment;
 use App\Models\Trailer;
 use App\Models\Vehicle;
 use App\Services\ShipmentService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class ShipmentController extends Controller
@@ -37,14 +39,53 @@ class ShipmentController extends Controller
             ->limit(40)
             ->get();
 
-        // Deliveries settled today (on time or late) — shown on the board.
-        $deliveredToday = Shipment::where('company_id', $company->id)
-            ->whereIn('status', [Shipment::STATUS_DELIVERED, Shipment::STATUS_LATE])
-            ->where('arrived_at', '>=', now()->startOfDay())
-            ->count();
+        // Today's performance snapshot for the On-the-Road panel.
+        $todayStart = now()->startOfDay();
 
-        return ShipmentResource::collection($shipments)
-            ->additional(['delivered_today' => $deliveredToday]);
+        $statusCounts = Shipment::where('company_id', $company->id)
+            ->where('arrived_at', '>=', $todayStart)
+            ->selectRaw('status, count(*) as c')
+            ->groupBy('status')
+            ->pluck('c', 'status');
+
+        $onTime = (int) ($statusCounts[Shipment::STATUS_DELIVERED] ?? 0);
+        $late = (int) ($statusCounts[Shipment::STATUS_LATE] ?? 0);
+        $failed = (int) ($statusCounts[Shipment::STATUS_FAILED] ?? 0);
+
+        // Delivery earnings today (net of tax) from the ledger.
+        $revenueToday = (int) LedgerEntry::where('company_id', $company->id)
+            ->where('occurred_at', '>=', $todayStart)
+            ->where(fn ($q) => $q->where('description', 'like', 'Delivered:%')
+                ->orWhere('description', 'like', 'Late delivery:%'))
+            ->sum('amount');
+
+        // The lane that earned the most today.
+        $best = DB::table('shipments')
+            ->join('contracts', 'shipments.contract_id', '=', 'contracts.id')
+            ->join('cities as oc', 'contracts.origin_city_id', '=', 'oc.id')
+            ->join('cities as dc', 'contracts.destination_city_id', '=', 'dc.id')
+            ->where('shipments.company_id', $company->id)
+            ->where('shipments.arrived_at', '>=', $todayStart)
+            ->whereIn('shipments.status', [Shipment::STATUS_DELIVERED, Shipment::STATUS_LATE])
+            ->groupBy('oc.name', 'dc.name')
+            ->selectRaw('oc.name as origin, dc.name as destination, sum(shipments.projected_payout) as total, count(*) as trips')
+            ->orderByDesc('total')
+            ->first();
+
+        return ShipmentResource::collection($shipments)->additional([
+            'delivered_today' => $onTime + $late,
+            'today' => [
+                'on_time' => $onTime,
+                'late' => $late,
+                'failed' => $failed,
+                'revenue' => $revenueToday,
+                'best_route' => $best ? [
+                    'label' => $best->origin.' → '.$best->destination,
+                    'amount' => (int) $best->total,
+                    'trips' => (int) $best->trips,
+                ] : null,
+            ],
+        ]);
     }
 
     /** Dispatch a vehicle + driver against an accepted contract. */

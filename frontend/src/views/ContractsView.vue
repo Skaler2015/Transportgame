@@ -99,11 +99,14 @@ async function loadEstimate() {
 const now = useClock(1000)
 const shipments = ref<Shipment[]>([])
 const deliveredToday = ref(0)
+type TodayStats = { on_time: number; late: number; failed: number; revenue: number; best_route: { label: string; amount: number; trips: number } | null }
+const today = ref<TodayStats>({ on_time: 0, late: 0, failed: 0, revenue: 0, best_route: null })
 async function loadShipments() {
   try {
     const { data } = await api.get('/shipments')
     shipments.value = data.data
     deliveredToday.value = data.delivered_today ?? 0
+    if (data.today) today.value = data.today
   } catch { /* best-effort */ }
 }
 // On the road, soonest arrival first.
@@ -272,6 +275,56 @@ const driverSummary = computed(() => ({
   busy: drivers.value.filter((d) => d.status === 'driving').length,
   resting: drivers.value.filter((d) => d.status === 'resting').length,
 }))
+// Trucks at a glance + how much of the fleet is earning right now.
+const fleetStatus = computed(() => {
+  const idle = vehicles.value.filter((v) => v.status === 'idle').length
+  const enRoute = vehicles.value.filter((v) => v.status === 'en_route').length
+  const maint = vehicles.value.filter((v) => v.status === 'maintenance').length
+  const total = vehicles.value.length
+  return { idle, enRoute, maint, total, util: total ? Math.round((enRoute / total) * 100) : 0 }
+})
+const trailerStatus = computed(() => ({
+  inUse: trailers.value.filter((t) => t.status === 'en_route').length,
+  free: trailers.value.filter((t) => t.status !== 'en_route').length,
+}))
+// Costs, margin and averages for everything currently rolling.
+const roadCosts = computed(() => roadTotals.value.value - roadTotals.value.profit)
+const avgProfit = computed(() => onTheRoad.value.length ? Math.round(roadTotals.value.profit / onTheRoad.value.length) : 0)
+const profitMargin = computed(() => roadTotals.value.value > 0 ? Math.round((roadTotals.value.profit / roadTotals.value.value) * 100) : 0)
+const totalKmOnRoad = computed(() => Math.round(onTheRoad.value.reduce((s, x) => s + (x.distance_km || 0), 0)))
+const totalTonnageOnRoad = computed(() => onTheRoad.value.reduce((s, x) => s + (x.contract?.total_weight ?? 0), 0))
+// Average time left, arriving-soon count, at-risk (will miss deadline) and low fuel.
+const avgTimeLeft = computed(() => {
+  if (!onTheRoad.value.length) return '—'
+  const total = onTheRoad.value.reduce((s, x) => s + Math.max(0, new Date(x.eta_at).getTime() - now.value), 0)
+  const secs = Math.round(total / onTheRoad.value.length / 1000)
+  const m = Math.floor(secs / 60), sec = secs % 60
+  return m ? `${m}m ${sec}s` : `${sec}s`
+})
+const arrivingSoon = computed(() => onTheRoad.value.filter((x) => {
+  const ms = new Date(x.eta_at).getTime() - now.value
+  return ms > 0 && ms <= 60000
+}).length)
+const atRiskCount = computed(() => onTheRoad.value.filter((x) => {
+  const d = x.contract?.deadline_at
+  return d && new Date(x.eta_at).getTime() > new Date(d).getTime()
+}).length)
+const lowFuelCount = computed(() => onTheRoad.value.filter((x) => (x.vehicle?.fuel_pct ?? 100) < 20).length)
+// The commodity making up the biggest share of what's on the road.
+const topCommodity = computed(() => {
+  const tally: Record<string, number> = {}
+  for (const s of onTheRoad.value) {
+    const name = s.contract?.commodity?.name
+    if (name) tally[name] = (tally[name] ?? 0) + 1
+  }
+  const top = Object.entries(tally).sort((a, b) => b[1] - a[1])[0]
+  return top ? { name: top[0], count: top[1] } : null
+})
+// Today's on-time rate (of settled deliveries) for the performance line.
+const onTimePct = computed(() => {
+  const done = today.value.on_time + today.value.late + today.value.failed
+  return done ? Math.round((today.value.on_time / done) * 100) : 100
+})
 
 // Contract table: expand-to-dispatch drawer + client-side sort on any column.
 const expandedContract = ref<number | null>(null)
@@ -720,7 +773,37 @@ onUnmounted(() => clearInterval(poll))
             <span class="text-slate-400">{{ driverSummary.resting }} rest</span>
           </span>
         </div>
+        <div v-if="today.revenue" class="flex items-center justify-between col-span-2">
+          <span class="text-slate-400">Revenue today</span>
+          <span class="font-mono text-gold font-semibold">{{ credits(today.revenue) }}</span>
+        </div>
+        <div v-if="atRiskCount || lowFuelCount" class="flex items-center justify-between col-span-2">
+          <span class="text-loss">🚨 Alerts</span>
+          <span class="font-mono text-loss font-semibold">
+            <template v-if="atRiskCount">⚠️ {{ atRiskCount }} late-risk</template>
+            <template v-if="atRiskCount && lowFuelCount"> · </template>
+            <template v-if="lowFuelCount">⛽ {{ lowFuelCount }} low fuel</template>
+          </span>
+        </div>
       </div>
+
+      <!-- Everything else, tucked behind a tap so the card stays small. -->
+      <details class="mt-2 border-t border-white/10 pt-1.5">
+        <summary class="text-[11px] text-brand-soft cursor-pointer list-none">More stats ▾</summary>
+        <div class="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 text-[11px]">
+          <div class="flex items-center justify-between"><span class="text-slate-400">Costs</span><span class="font-mono text-loss">−{{ credits(roadCosts) }}</span></div>
+          <div class="flex items-center justify-between"><span class="text-slate-400">Margin</span><span class="font-mono text-slate-200">{{ profitMargin }}%</span></div>
+          <div class="flex items-center justify-between"><span class="text-slate-400">Avg/delivery</span><span class="font-mono text-slate-200">{{ credits(avgProfit) }}</span></div>
+          <div class="flex items-center justify-between"><span class="text-slate-400">Avg left</span><span class="font-mono text-slate-200">⏱ {{ avgTimeLeft }}</span></div>
+          <div class="flex items-center justify-between"><span class="text-slate-400">On road</span><span class="font-mono text-slate-200">{{ num(totalKmOnRoad) }}km</span></div>
+          <div class="flex items-center justify-between"><span class="text-slate-400">Tonnage</span><span class="font-mono text-slate-200">{{ num(totalTonnageOnRoad, 1) }}t</span></div>
+          <div class="flex items-center justify-between col-span-2"><span class="text-slate-400">Trucks</span><span class="font-mono"><span class="text-gain">{{ fleetStatus.idle }} idle</span> · <span class="text-brand-soft">{{ fleetStatus.enRoute }} out</span> · <span class="text-loss">{{ fleetStatus.maint }} shop</span> · {{ fleetStatus.util }}% util</span></div>
+          <div class="flex items-center justify-between col-span-2"><span class="text-slate-400">Trailers</span><span class="font-mono text-slate-200"><span class="text-gain">{{ trailerStatus.free }} free</span> · {{ trailerStatus.inUse }} in use</span></div>
+          <div class="flex items-center justify-between col-span-2"><span class="text-slate-400">Delivered today</span><span class="font-mono"><span class="text-gain">{{ today.on_time }} ok</span> · <span class="text-gold">{{ today.late }} late</span> · <span class="text-loss">{{ today.failed }} fail</span> ({{ onTimePct }}%)</span></div>
+          <div v-if="today.best_route" class="flex items-center justify-between col-span-2"><span class="text-slate-400">Best lane</span><span class="font-mono text-slate-200 truncate ml-2">{{ today.best_route.label }} · {{ credits(today.best_route.amount) }}</span></div>
+          <div v-if="topCommodity" class="flex items-center justify-between col-span-2"><span class="text-slate-400">Top cargo</span><span class="font-mono text-slate-200">{{ topCommodity.name }} ×{{ topCommodity.count }}</span></div>
+        </div>
+      </details>
     </div>
 
     <div v-if="loading" class="grid place-items-center h-64 text-slate-500">Loading market…</div>
@@ -915,34 +998,42 @@ onUnmounted(() => clearInterval(poll))
          <span class="text-[11px] font-normal text-gain">✅ {{ deliveredToday }} done today</span>
        </h3>
 
-       <!-- Headline totals for everything currently on the road, up top. -->
-       <div v-if="onTheRoad.length" class="rounded-lg bg-white/5 p-2.5 space-y-1 mb-3">
-         <div class="flex items-center justify-between text-xs">
-           <span class="text-slate-400">Total value</span>
-           <span class="font-mono text-gold font-semibold">{{ credits(roadTotals.value) }}</span>
-         </div>
-         <div class="flex items-center justify-between text-xs">
-           <span class="text-slate-400">Total est. profit</span>
-           <span class="font-mono font-semibold" :class="roadTotals.profit >= 0 ? 'text-gain' : 'text-loss'">
-             {{ credits(roadTotals.profit) }}
-           </span>
-         </div>
-         <div class="flex items-center justify-between text-xs border-t border-white/10 pt-1">
-           <span class="text-slate-400">Cash after these land</span>
-           <span class="font-mono text-brand-soft font-semibold">{{ credits(projectedCash) }}</span>
-         </div>
-         <div class="flex items-center justify-between text-xs">
-           <span class="text-slate-400">Longest still running</span>
-           <span class="font-mono text-slate-200 font-semibold">⏱ {{ maxTimeLeft }}</span>
-         </div>
-         <div class="flex items-center justify-between text-xs border-t border-white/10 pt-1">
-           <span class="text-slate-400">Drivers</span>
-           <span class="font-mono font-semibold">
-             <span class="text-gain">{{ driverSummary.free }} free</span> ·
-             <span class="text-brand-soft">{{ driverSummary.busy }} busy</span> ·
-             <span class="text-slate-400">{{ driverSummary.resting }} resting</span>
-           </span>
-         </div>
+       <!-- Full command-centre readout: money, time, cargo, fleet, today. -->
+       <div v-if="onTheRoad.length" class="rounded-lg bg-white/5 p-2.5 space-y-1 mb-3 [&_.row]:flex [&_.row]:items-center [&_.row]:justify-between [&_.row]:text-xs [&_.sep]:border-t [&_.sep]:border-white/10 [&_.sep]:pt-1 [&_.sep]:mt-1">
+         <p class="stat-label !text-[9px] text-brand-soft">💰 Money</p>
+         <div class="row"><span class="text-slate-400">Total value</span><span class="font-mono text-gold font-semibold">{{ credits(roadTotals.value) }}</span></div>
+         <div class="row"><span class="text-slate-400">Est. profit</span><span class="font-mono font-semibold" :class="roadTotals.profit >= 0 ? 'text-gain' : 'text-loss'">{{ credits(roadTotals.profit) }}</span></div>
+         <div class="row"><span class="text-slate-400">Costs (fuel+tolls+tax)</span><span class="font-mono text-loss">−{{ credits(roadCosts) }}</span></div>
+         <div class="row"><span class="text-slate-400">Avg profit / delivery</span><span class="font-mono text-slate-200">{{ credits(avgProfit) }}</span></div>
+         <div class="row"><span class="text-slate-400">Profit margin</span><span class="font-mono text-slate-200">{{ profitMargin }}%</span></div>
+         <div class="row"><span class="text-slate-400">Cash after these land</span><span class="font-mono text-brand-soft font-semibold">{{ credits(projectedCash) }}</span></div>
+
+         <p class="stat-label !text-[9px] text-brand-soft sep">⏱ Time</p>
+         <div class="row"><span class="text-slate-400">Shortest / Longest</span><span class="font-mono text-slate-200"><span class="text-gain">{{ minTimeLeft }}</span> · {{ maxTimeLeft }}</span></div>
+         <div class="row"><span class="text-slate-400">Average left</span><span class="font-mono text-slate-200">⏱ {{ avgTimeLeft }}</span></div>
+         <div class="row"><span class="text-slate-400">Arriving &lt; 1 min</span><span class="font-mono" :class="arrivingSoon ? 'text-gain font-semibold' : 'text-slate-400'">{{ arrivingSoon }}</span></div>
+
+         <p class="stat-label !text-[9px] text-brand-soft sep">📦 Cargo</p>
+         <div class="row"><span class="text-slate-400">On the road</span><span class="font-mono text-slate-200">{{ num(totalKmOnRoad) }} km · {{ num(totalTonnageOnRoad, 1) }}t</span></div>
+         <div class="row" v-if="topCommodity"><span class="text-slate-400">Top cargo</span><span class="font-mono text-slate-200">{{ topCommodity.name }} ×{{ topCommodity.count }}</span></div>
+
+         <p class="stat-label !text-[9px] text-brand-soft sep">🚛 Fleet</p>
+         <div class="row"><span class="text-slate-400">Drivers</span><span class="font-mono"><span class="text-gain">{{ driverSummary.free }} free</span> · <span class="text-brand-soft">{{ driverSummary.busy }} busy</span> · <span class="text-slate-400">{{ driverSummary.resting }} rest</span></span></div>
+         <div class="row"><span class="text-slate-400">Trucks</span><span class="font-mono"><span class="text-gain">{{ fleetStatus.idle }} idle</span> · <span class="text-brand-soft">{{ fleetStatus.enRoute }} out</span> · <span class="text-loss">{{ fleetStatus.maint }} shop</span></span></div>
+         <div class="row"><span class="text-slate-400">Trailers</span><span class="font-mono text-slate-200"><span class="text-gain">{{ trailerStatus.free }} free</span> · {{ trailerStatus.inUse }} in use</span></div>
+         <div class="row"><span class="text-slate-400">Utilization</span><span class="font-mono font-semibold" :class="fleetStatus.util >= 80 ? 'text-gain' : 'text-slate-200'">{{ fleetStatus.util }}%</span></div>
+
+         <p class="stat-label !text-[9px] text-brand-soft sep">📅 Today</p>
+         <div class="row"><span class="text-slate-400">Revenue</span><span class="font-mono text-gold font-semibold">{{ credits(today.revenue) }}</span></div>
+         <div class="row"><span class="text-slate-400">Delivered</span><span class="font-mono"><span class="text-gain">{{ today.on_time }} on-time</span> · <span class="text-gold">{{ today.late }} late</span> · <span class="text-loss">{{ today.failed }} failed</span></span></div>
+         <div class="row"><span class="text-slate-400">On-time rate</span><span class="font-mono font-semibold" :class="onTimePct >= 90 ? 'text-gain' : onTimePct >= 70 ? 'text-gold' : 'text-loss'">{{ onTimePct }}%</span></div>
+         <div class="row" v-if="today.best_route"><span class="text-slate-400">Best lane</span><span class="font-mono text-slate-200 truncate ml-2">{{ today.best_route.label }} · {{ credits(today.best_route.amount) }}</span></div>
+
+         <template v-if="atRiskCount || lowFuelCount">
+           <p class="stat-label !text-[9px] text-loss sep">🚨 Alerts</p>
+           <div class="row" v-if="atRiskCount"><span class="text-slate-400">Will miss deadline</span><span class="font-mono text-loss font-semibold">⚠️ {{ atRiskCount }}</span></div>
+           <div class="row" v-if="lowFuelCount"><span class="text-slate-400">Low fuel en route</span><span class="font-mono text-loss font-semibold">⛽ {{ lowFuelCount }}</span></div>
+         </template>
        </div>
 
        <div v-if="onTheRoad.length" class="divide-y divide-white/5">
