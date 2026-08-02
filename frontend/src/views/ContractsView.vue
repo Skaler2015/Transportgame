@@ -466,25 +466,6 @@ function costBreakdown(c: Contract) {
   return { tax, toll, fuel, expenses, profit: (c.payout || 0) - expenses, hasVehicle: !!m }
 }
 
-const busyUpkeep = ref<'service' | 'fuel' | null>(null)
-async function serviceAll() {
-  busyUpkeep.value = 'service'
-  try {
-    const { data } = await api.post('/fleet/service-all')
-    toast.success(data.message)
-    await loadFleet(); load(true)
-    game.refreshDashboard().catch(() => {})
-  } catch (e) { toast.error(apiError(e)) } finally { busyUpkeep.value = null }
-}
-async function fuelAll() {
-  busyUpkeep.value = 'fuel'
-  try {
-    const { data } = await api.post('/fleet/refuel-all')
-    toast.success(data.message)
-    await loadFleet(); load(true)
-    game.refreshDashboard().catch(() => {})
-  } catch (e) { toast.error(apiError(e)) } finally { busyUpkeep.value = null }
-}
 
 async function accept(c: Contract) {
   accepting.value = c.id
@@ -584,18 +565,6 @@ onUnmounted(() => clearInterval(poll))
       <div>
         <h1 class="text-2xl font-bold">Contract Market</h1>
         <p class="text-slate-400 text-sm">Claim a job and dispatch it right here. Auto-refreshes as new jobs appear.</p>
-      </div>
-      <div class="flex gap-2">
-        <button class="btn-ghost !py-1.5" :disabled="busyUpkeep !== null || upkeepEst.service.count === 0" @click="serviceAll">
-          <template v-if="busyUpkeep === 'service'">Servicing…</template>
-          <template v-else-if="upkeepEst.service.count > 0">🔧 Service All · {{ credits(upkeepEst.service.total) }}</template>
-          <template v-else>🔧 Service All</template>
-        </button>
-        <button class="btn-ghost !py-1.5" :disabled="busyUpkeep !== null || upkeepEst.fuel.count === 0" @click="fuelAll">
-          <template v-if="busyUpkeep === 'fuel'">Fuelling…</template>
-          <template v-else-if="upkeepEst.fuel.count > 0">⛽ Fuel All · {{ credits(upkeepEst.fuel.total) }}</template>
-          <template v-else>⛽ Fuel All</template>
-        </button>
       </div>
     </div>
 
