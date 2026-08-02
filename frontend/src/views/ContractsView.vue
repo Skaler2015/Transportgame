@@ -691,9 +691,9 @@ onUnmounted(() => clearInterval(poll))
       </div>
     </div>
 
-    <!-- Mobile alert: free vehicles that need service. Tap to expand the list
-         right here and fix each one in place — no scrolling to another panel. -->
-    <div v-if="vehiclesNeedingFix.length" class="lg:hidden glass !p-3 ring-1 ring-gold/40">
+    <!-- Alert (all screens): free vehicles that need service. Tap to expand the
+         list right here and fix each one in place — no scrolling to a panel. -->
+    <div v-if="vehiclesNeedingFix.length" class="glass !p-3 ring-1 ring-gold/40">
       <div class="w-full flex items-center justify-between gap-2">
         <button type="button" class="text-sm text-gold text-left flex-1 min-w-0" @click="serviceOpen = !serviceOpen">
           🛠 {{ vehiclesNeedingFix.length }} vehicle(s) need service
