@@ -447,7 +447,26 @@ const visibleContracts = computed(() =>
 // How many jobs on the board have a one-tap GO, and how many I could actually
 // dispatch right now (capped by free drivers and idle trucks).
 const goReadyCount = computed(() => sortedContracts.value.filter((c) => readyToGo(c)).length)
-const canGoNow = computed(() => Math.min(goReadyCount.value, driverSummary.value.free, fleetStatus.value.idle))
+// How many jobs could ACTUALLY be dispatched at once — greedily allocate the
+// shared truck/driver/trailer pool so contracts competing for the same rig at
+// the same city aren't double-counted.
+const canGoNow = computed(() => {
+  const usedV = new Set<number>(), usedD = new Set<number>(), usedT = new Set<number>()
+  let count = 0
+  for (const c of sortedContracts.value) {
+    const v = compatibleVehicles(c).find((x) => !usedV.has(x.id))
+    if (!v) continue
+    const d = compatibleDrivers(c).find((x) => !usedD.has(x.id))
+    if (!d) continue
+    if (v.model?.needs_trailer) {
+      const t = compatibleTrailers(c).find((x) => !usedT.has(x.id))
+      if (!t) continue
+      usedT.add(t.id)
+    }
+    usedV.add(v.id); usedD.add(d.id); count++
+  }
+  return count
+})
 
 // ---- compatibility (mirrors Operations) -----------------------------------
 function modeOk(v: Vehicle, c: Contract): boolean {
