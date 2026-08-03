@@ -30,6 +30,9 @@ const activeFilterCount = computed(() =>
   + (dropdownSort.value !== 'eta' ? 1 : 0),
 )
 const haulableOnly = ref(true)
+// Show only jobs a rig can be dispatched on with one tap (GO), hiding the
+// ones that would need the drawer to pick a vehicle/driver.
+const goOnly = ref(false)
 // On by default: show jobs starting where your trucks are (parked or arriving),
 // so a free truck always sees local work first. Untick to see the whole market.
 const backhaulOnly = ref(true)
@@ -429,6 +432,10 @@ const sortedContracts = computed(() => {
     return dir === 'asc' ? cmp : -cmp
   })
 })
+// What actually renders — optionally narrowed to one-tap-GO jobs only.
+const visibleContracts = computed(() =>
+  goOnly.value ? sortedContracts.value.filter((c) => readyToGo(c)) : sortedContracts.value,
+)
 
 // ---- compatibility (mirrors Operations) -----------------------------------
 function modeOk(v: Vehicle, c: Contract): boolean {
@@ -575,6 +582,7 @@ function saveFilters() {
       hqOnly: hqOnly.value,
       backhaulOnly: backhaulOnly.value,
       haulableOnly: haulableOnly.value,
+      goOnly: goOnly.value,
     }))
     savedFilters.value = true
     toast.success('Filters saved — they’ll load automatically next time.')
@@ -592,6 +600,7 @@ function loadSavedFilters(): boolean {
     hqOnly.value = !!s.hqOnly
     backhaulOnly.value = s.backhaulOnly ?? true
     haulableOnly.value = s.haulableOnly ?? true
+    goOnly.value = !!s.goOnly
     // Mirror the sort into cSort + the server sort param.
     cSort.value = { k: dropdownSort.value, dir: (['value', 'profit', 'permin'].includes(dropdownSort.value)) ? 'desc' : 'asc' }
     filters.value.sort = (['value', 'profit', 'permin'].includes(dropdownSort.value)) ? 'payout'
@@ -686,6 +695,11 @@ onUnmounted(() => clearInterval(poll))
         <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
           <input type="checkbox" v-model="haulableOnly" class="accent-brand h-4 w-4" @change="load()" />
           Only what my fleet can haul
+        </label>
+        <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none"
+          title="Show only jobs you can dispatch in one tap with GO.">
+          <input type="checkbox" v-model="goOnly" class="accent-brand h-4 w-4" />
+          ⚡ Ready to GO only
         </label>
       </div>
       </div>
@@ -817,7 +831,7 @@ onUnmounted(() => clearInterval(poll))
     <div v-if="loading" class="grid place-items-center h-64 text-slate-500">Loading market…</div>
 
     <!-- Compact, sortable contract table. Click a row's GO to dispatch. -->
-    <div v-else-if="contracts.length">
+    <div v-else-if="visibleContracts.length">
       <!-- Desktop: full sortable table (md and up) -->
       <div class="hidden md:block glass !p-0 overflow-hidden">
       <div class="overflow-x-auto">
@@ -838,7 +852,7 @@ onUnmounted(() => clearInterval(poll))
           </tr>
         </thead>
         <tbody>
-          <template v-for="c in sortedContracts" :key="c.id">
+          <template v-for="c in visibleContracts" :key="c.id">
             <tr class="border-b border-white/5 transition hover:bg-brand/[0.06] odd:bg-white/[0.015] cursor-pointer"
               :class="c.at_fleet_city ? 'bg-brand/[0.07]' : ''" @click="toggleContract(c.id)">
               <!-- Cargo -->
@@ -932,7 +946,7 @@ onUnmounted(() => clearInterval(poll))
 
       <!-- Mobile: compact card list (tap a card to dispatch) -->
       <div class="md:hidden space-y-2">
-        <div v-for="c in sortedContracts" :key="c.id" class="glass !p-3"
+        <div v-for="c in visibleContracts" :key="c.id" class="glass !p-3"
           :class="c.at_fleet_city ? 'ring-1 ring-brand/40' : ''">
           <div class="cursor-pointer" @click="toggleContract(c.id)">
             <div class="flex items-center justify-between gap-2">
@@ -988,9 +1002,13 @@ onUnmounted(() => clearInterval(poll))
     </div>
 
     <div v-else class="glass p-10 text-center text-slate-400">
-      <p v-if="haulableOnly">No open contracts fit an available truck right now.</p>
+      <p v-if="goOnly">No jobs are ready for one-tap GO right now.</p>
+      <p v-else-if="haulableOnly">No open contracts fit an available truck right now.</p>
       <p v-else>No contracts match those filters. Try widening your search or advancing the world.</p>
-      <p v-if="haulableOnly" class="text-xs text-slate-500 mt-2">
+      <p v-if="goOnly" class="text-xs text-slate-500 mt-2">
+        Untick “⚡ Ready to GO only” to see jobs you can set up manually.
+      </p>
+      <p v-else-if="haulableOnly" class="text-xs text-slate-500 mt-2">
         Free up or buy a bigger truck, or untick “Only what my fleet can haul” to see everything.
       </p>
     </div>
