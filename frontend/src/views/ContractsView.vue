@@ -432,9 +432,13 @@ function cVal(c: Contract, k: CSortKey): number | string {
   }
 }
 // Always client-sorted (default: shortest ETA first); header/dropdown change it.
+// One-tap-GO jobs always float to the top so the ready-to-launch work is first
+// and the "Dispatch →" (needs the drawer) jobs sit below it.
 const sortedContracts = computed(() => {
   const { k, dir } = cSort.value
   return [...contracts.value].sort((a, b) => {
+    const ra = readyToGo(a) ? 0 : 1, rb = readyToGo(b) ? 0 : 1
+    if (ra !== rb) return ra - rb
     const av = cVal(a, k), bv = cVal(b, k)
     const cmp = typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number)
     return dir === 'asc' ? cmp : -cmp
