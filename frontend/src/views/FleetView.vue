@@ -300,8 +300,9 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
         </thead>
         <tbody>
           <template v-for="v in tableVehicles" :key="v.id">
-            <tr class="border-b border-white/5 hover:bg-white/5 transition"
-              :class="needScore(v) > 40 ? 'bg-loss/5' : ''">
+            <tr class="border-b border-white/5 hover:bg-white/5 transition cursor-pointer"
+              :class="[needScore(v) > 40 ? 'bg-loss/5' : '', expandedId === v.id ? 'bg-white/5' : '']"
+              @click="toggleExpand(v.id)">
               <td class="px-3 py-2">
                 <div class="flex items-center gap-2 min-w-0">
                   <span>{{ MODE_ICON[v.model?.mode ?? 'road'] }}</span>
@@ -325,7 +326,7 @@ onMounted(() => load().catch((e) => toast.error(apiError(e))))
                 <span :title="v.is_registered ? 'Registered' : 'Unregistered'" :class="v.is_registered ? '' : 'opacity-30'">📋</span>
               </td>
               <td class="px-2 text-[11px]" :class="needScore(v) > 40 ? 'text-loss' : 'text-gold'">{{ needSummary(v) || '—' }}</td>
-              <td class="px-3 py-2 text-right whitespace-nowrap">
+              <td class="px-3 py-2 text-right whitespace-nowrap" @click.stop>
                 <button class="btn-primary !py-1 !px-2 text-[11px]" title="Full service & refuel" :disabled="working === v.id || v.status === 'en_route'" @click="fullService(v)">⚡</button>
                 <button class="btn-ghost !py-1 !px-2 text-[11px] ml-1" title="Manage" @click="toggleExpand(v.id)">{{ expandedId === v.id ? '×' : '⋯' }}</button>
               </td>
