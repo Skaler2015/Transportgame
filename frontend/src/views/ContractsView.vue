@@ -782,6 +782,10 @@ onUnmounted(() => clearInterval(poll))
           <span class="text-slate-400">Revenue today</span>
           <span class="font-mono text-gold font-semibold">{{ credits(today.revenue) }}</span>
         </div>
+        <div class="flex items-center justify-between col-span-2">
+          <span class="text-slate-400">+ on-road value</span>
+          <span class="font-mono text-gain font-semibold">{{ credits(today.revenue + roadTotals.value) }}</span>
+        </div>
         <div v-if="atRiskCount || lowFuelCount" class="flex items-center justify-between col-span-2">
           <span class="text-loss">🚨 Alerts</span>
           <span class="font-mono text-loss font-semibold">
@@ -1029,6 +1033,7 @@ onUnmounted(() => clearInterval(poll))
 
          <p class="stat-label !text-[9px] text-brand-soft sep">📅 Today</p>
          <div class="row"><span class="text-slate-400">Revenue</span><span class="font-mono text-gold font-semibold">{{ credits(today.revenue) }}</span></div>
+         <div class="row"><span class="text-slate-400">+ on-road value</span><span class="font-mono text-gain font-semibold">{{ credits(today.revenue + roadTotals.value) }}</span></div>
          <div class="row"><span class="text-slate-400">Delivered</span><span class="font-mono"><span class="text-gain">{{ today.on_time }} on-time</span> · <span class="text-gold">{{ today.late }} late</span> · <span class="text-loss">{{ today.failed }} failed</span></span></div>
          <div class="row"><span class="text-slate-400">On-time rate</span><span class="font-mono font-semibold" :class="onTimePct >= 90 ? 'text-gain' : onTimePct >= 70 ? 'text-gold' : 'text-loss'">{{ onTimePct }}%</span></div>
          <div class="row" v-if="today.best_route"><span class="text-slate-400">Best lane</span><span class="font-mono text-slate-200 truncate ml-2">{{ today.best_route.label }} · {{ credits(today.best_route.amount) }}</span></div>
