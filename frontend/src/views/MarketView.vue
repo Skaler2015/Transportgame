@@ -17,12 +17,20 @@ const auth = useAuthStore()
 const toast = useToastStore()
 
 interface Market { city_id: number; city: string; region: string; price: number; base_price: number; demand_index: number; delta_pct: number }
+interface Mover { commodity_id: number; commodity: string; category: string; avg_price: number; base_price: number; delta_pct: number; demand_index: number; markets: number }
 const markets = ref<Market[]>([])
+const movers = ref<Mover[]>([])
 const commodityId = ref<number | null>(null)
 const basePrice = ref(0)
 const season = ref<{ name: string; demand: Record<string, number> } | null>(null)
 const historyCity = ref<number | null>(null)
 const series = ref<{ price: number; at: string }[]>([])
+
+// Biggest gainers / losers across the whole commodity board.
+const gainers = computed(() => movers.value.filter((m) => m.delta_pct > 0).slice(0, 5))
+const losers = computed(() =>
+  [...movers.value].filter((m) => m.delta_pct < 0).sort((a, b) => a.delta_pct - b.delta_pct).slice(0, 5),
+)
 
 const maxPrice = computed(() => Math.max(1, ...markets.value.map((m) => m.price)))
 const bestBuy = computed(() => markets.value.reduce((a, b) => (b.price < a.price ? b : a), markets.value[0]))
@@ -40,6 +48,21 @@ async function loadMarket() {
   } catch (e) {
     toast.error(apiError(e))
   }
+}
+
+async function loadMovers() {
+  try {
+    const { data } = await api.get('/market/overview', { params: { country: auth.company?.country } })
+    movers.value = data.data
+  } catch {
+    /* movers board is a nicety — never block the market on it */
+  }
+}
+
+// Jump the whole market view to a commodity picked from the movers board.
+function focusCommodity(id: number) {
+  commodityId.value = id
+  loadMarket()
 }
 
 async function loadHistory() {
@@ -78,7 +101,7 @@ const chartOptions: any = {
 onMounted(async () => {
   await game.loadReference().catch(() => {})
   commodityId.value = game.commodities[0]?.id ?? null
-  await loadMarket()
+  await Promise.all([loadMarket(), loadMovers()])
 })
 </script>
 
@@ -104,6 +127,42 @@ onMounted(async () => {
           <span class="capitalize">{{ cat }}</span>
           <span :class="mult >= 1 ? 'text-gain' : 'text-loss'"> {{ mult >= 1 ? '+' : '' }}{{ Math.round((mult - 1) * 100) }}%</span>
         </span>
+      </div>
+    </div>
+
+    <!-- Market movers: biggest gainers / losers across every commodity -->
+    <div v-if="movers.length" class="grid md:grid-cols-2 gap-4">
+      <div class="glass p-4">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-gain">▲</span>
+          <h2 class="font-semibold text-sm">Top gainers</h2>
+          <span class="text-[11px] text-slate-500">— dearest vs. base price</span>
+        </div>
+        <div class="space-y-1">
+          <button v-for="m in gainers" :key="m.commodity_id"
+            class="w-full flex items-center justify-between text-sm px-2 py-1.5 rounded-lg hover:bg-white/5"
+            @click="focusCommodity(m.commodity_id)">
+            <span class="truncate">{{ m.commodity }}</span>
+            <span class="font-mono text-gain shrink-0">+{{ m.delta_pct }}%</span>
+          </button>
+          <p v-if="!gainers.length" class="text-[11px] text-slate-500 px-2 py-1">No commodity above base right now.</p>
+        </div>
+      </div>
+      <div class="glass p-4">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-loss">▼</span>
+          <h2 class="font-semibold text-sm">Top losers</h2>
+          <span class="text-[11px] text-slate-500">— cheapest to buy & haul</span>
+        </div>
+        <div class="space-y-1">
+          <button v-for="m in losers" :key="m.commodity_id"
+            class="w-full flex items-center justify-between text-sm px-2 py-1.5 rounded-lg hover:bg-white/5"
+            @click="focusCommodity(m.commodity_id)">
+            <span class="truncate">{{ m.commodity }}</span>
+            <span class="font-mono text-loss shrink-0">{{ m.delta_pct }}%</span>
+          </button>
+          <p v-if="!losers.length" class="text-[11px] text-slate-500 px-2 py-1">No commodity below base right now.</p>
+        </div>
       </div>
     </div>
 

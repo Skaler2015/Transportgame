@@ -46,6 +46,7 @@ Route::get('/world/events', [WorldController::class, 'events']);
 Route::get('/world/leaderboard', [WorldController::class, 'leaderboard']);
 Route::get('/market', [MarketController::class, 'index']);
 Route::get('/market/history', [MarketController::class, 'history']);
+Route::get('/market/overview', [MarketController::class, 'overview']);
 
 // Non-production helper to advance the simulation on demand.
 Route::post('/dev/tick', [DevController::class, 'tick']);

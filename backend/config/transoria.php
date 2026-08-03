@@ -63,6 +63,16 @@ return [
         'price_ceiling_pct' => 2.6,   // never above 260% of base
         'demand_smoothing' => 0.35,   // EMA factor for demand index
         'fuel_drift' => 0.04,         // max fractional fuel-price wander per tick
+
+        // Living-economy v2:
+        // A gentle deterministic wander (bounded fraction) so even a quiet
+        // commodity's price history breathes hour to hour, never flat-lines.
+        'market_noise_pct' => 0.03,
+        // Agglomeration: the more firms (players + rival AI) headquartered in a
+        // region, the hotter its local demand — so the rival companies you
+        // compete with visibly bid up prices where they cluster. Capped uplift.
+        'commercial_demand_per_firm' => 0.006,
+        'commercial_demand_cap' => 0.15,
     ],
 
     // Seasonal demand. The current calendar month shifts demand for whole

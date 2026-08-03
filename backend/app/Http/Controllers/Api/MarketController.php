@@ -66,6 +66,22 @@ class MarketController extends Controller
         ]);
     }
 
+    /**
+     * Market-wide movers for a country: every commodity's average price, how
+     * far it's drifted from base, demand and market count — sorted so the
+     * biggest gainers lead. Powers the "market movers" board.
+     */
+    public function overview(Request $request)
+    {
+        $country = array_key_exists($request->query('country') ?? null, config('transoria.countries'))
+            ? $request->query('country')
+            : ($request->user()?->company?->country ?? config('transoria.default_country'));
+
+        return response()->json([
+            'data' => app(EconomyService::class)->marketOverview($country),
+        ]);
+    }
+
     /** Price history series for one city/commodity (for charts). */
     public function history(Request $request)
     {

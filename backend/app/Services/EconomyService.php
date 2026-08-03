@@ -28,7 +28,7 @@ class EconomyService
      * @param  Collection<int,WorldEvent>  $events
      * @return array{price: float, demand_index: float}
      */
-    public function localPrice(City $city, Commodity $commodity, int $production, int $consumption, int $stock, Collection $events): array
+    public function localPrice(City $city, Commodity $commodity, int $production, int $consumption, int $stock, Collection $events, float $commercialDemand = 1.0): array
     {
         $cfg = config('transoria.economy');
 
@@ -47,6 +47,19 @@ class EconomyService
         // Richer, faster-growing cities consume a little more eagerly.
         if ($city->gdp_per_capita) {
             $demandIndex *= 1 + min(0.15, max(-0.05, ($city->gdp_per_capita - 300_000) / 3_000_000));
+        }
+
+        // Agglomeration: where many firms (players + rival AI) cluster, local
+        // demand runs hotter — so competitors bid up the markets they crowd.
+        $demandIndex *= $commercialDemand;
+
+        // Gentle deterministic wander (stable within a clock hour) so a quiet
+        // commodity's price still breathes on the history chart instead of
+        // flat-lining. Bounded by economy.market_noise_pct.
+        $noise = (float) ($cfg['market_noise_pct'] ?? 0.0);
+        if ($noise > 0) {
+            $seed = crc32($city->id.':'.$commodity->id.':'.now()->format('YmdH'));
+            $demandIndex *= 1 + ((($seed % 1000) / 1000) - 0.5) * 2 * $noise;
         }
 
         // Apply demand modifiers from events scoped to this city/commodity/region.
@@ -124,6 +137,10 @@ class EconomyService
         $cities = City::all()->keyBy('id');
         $commodities = Commodity::all()->keyBy('id');
 
+        // Region → commercial-demand factor from how many firms (players + AI)
+        // are headquartered there. Computed once per tick, applied per city.
+        $commercial = $this->commercialDemandByRegion();
+
         $snapshots = [];
 
         foreach ($rows as $row) {
@@ -136,7 +153,8 @@ class EconomyService
             // Move inventory: production adds, consumption drains, clamped.
             $newStock = max(0, min($row->stock_cap, $row->stock + $row->production - $row->consumption));
 
-            $result = $this->localPrice($city, $commodity, $row->production, $row->consumption, $newStock, $events);
+            $result = $this->localPrice($city, $commodity, $row->production, $row->consumption, $newStock, $events,
+                $commercial[$city->region] ?? 1.0);
 
             DB::table('city_commodity')->where('id', $row->id)->update(['stock' => $newStock]);
 
@@ -179,6 +197,71 @@ class EconomyService
             ->first();
 
         return $row?->price ?? $commodity->base_price;
+    }
+
+    /**
+     * How much each region's local demand is lifted by the firms clustered
+     * there. More head offices (players AND rival AI) → hotter markets, capped.
+     * Returns region-name → multiplier (≥ 1.0).
+     */
+    public function commercialDemandByRegion(): array
+    {
+        $perFirm = (float) config('transoria.economy.commercial_demand_per_firm', 0.0);
+        $cap = (float) config('transoria.economy.commercial_demand_cap', 0.15);
+        if ($perFirm <= 0) {
+            return [];
+        }
+
+        $counts = DB::table('companies')
+            ->join('cities', 'companies.headquarters_city_id', '=', 'cities.id')
+            ->whereNull('companies.ai_bankrupt_at')
+            ->groupBy('cities.region')
+            ->selectRaw('cities.region as region, COUNT(*) as firms')
+            ->pluck('firms', 'region');
+
+        return $counts->map(fn ($n) => 1 + min($cap, $n * $perFirm))->all();
+    }
+
+    /**
+     * A country-wide market pulse: every commodity's average local price, how
+     * far it sits from base, its demand index, and the biggest movers. Powers
+     * the "market movers" board so players read the whole economy at a glance.
+     */
+    public function marketOverview(string $country): array
+    {
+        $cityIds = City::where('country', $country)->pluck('id');
+        if ($cityIds->isEmpty()) {
+            return [];
+        }
+
+        $commodities = Commodity::all()->keyBy('id');
+
+        // Latest snapshot per (city, commodity) inside this country.
+        $latest = MarketPrice::query()
+            ->whereIn('city_id', $cityIds)
+            ->orderByDesc('recorded_at')
+            ->get(['city_id', 'commodity_id', 'price', 'demand_index', 'recorded_at'])
+            ->unique(fn ($r) => $r->city_id.':'.$r->commodity_id);
+
+        return $latest->groupBy('commodity_id')->map(function ($rows, $commodityId) use ($commodities) {
+            $commodity = $commodities[$commodityId] ?? null;
+            if (! $commodity) {
+                return null;
+            }
+            $avg = round($rows->avg('price'), 2);
+            $base = (float) $commodity->base_price;
+
+            return [
+                'commodity_id' => (int) $commodityId,
+                'commodity' => $commodity->name,
+                'category' => $commodity->category,
+                'avg_price' => $avg,
+                'base_price' => $base,
+                'delta_pct' => $base > 0 ? round(($avg - $base) / $base * 100, 1) : 0,
+                'demand_index' => round($rows->avg('demand_index'), 3),
+                'markets' => $rows->count(),
+            ];
+        })->filter()->sortByDesc('delta_pct')->values()->all();
     }
 
     /**
