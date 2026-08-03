@@ -444,13 +444,30 @@ const sortedContracts = computed(() => {
     return dir === 'asc' ? cmp : -cmp
   })
 })
-// What actually renders — optionally narrowed to one-tap-GO jobs only.
-const visibleContracts = computed(() =>
-  goOnly.value ? sortedContracts.value.filter((c) => readyToGo(c)) : sortedContracts.value,
+// The one-tap-GO jobs on the board.
+const goReadyList = computed(() => sortedContracts.value.filter((c) => readyToGo(c)))
+// What actually renders. "Ready to GO only" narrows to one-tap jobs, BUT if
+// that leaves the board empty while there's still haulable work (e.g. every
+// idle truck is a tractor and no trailer is free) we fall back to the full
+// list — a free vehicle should always see the jobs it could take next.
+const goFellBack = computed(
+  () => goOnly.value && goReadyList.value.length === 0 && sortedContracts.value.length > 0,
 )
+const visibleContracts = computed(() =>
+  goOnly.value && !goFellBack.value ? goReadyList.value : sortedContracts.value,
+)
+// Why is nothing one-tap ready even though trucks are free? Name the blocker so
+// the empty/fallback banner can tell the player exactly what to unblock.
+const goBlockReason = computed(() => {
+  if (fleetStatus.value.idle === 0) return 'No truck is idle — one must finish its run first.'
+  if (trailerStatus.value.free === 0 && trailerStatus.value.inUse > 0)
+    return 'No trailer is free — every trailer is on the road. Free one up in Fleet.'
+  if (driverSummary.value.free === 0) return 'No driver is free — rest or hire crew in Crew.'
+  return 'These jobs need a trailer or driver that matches — set one up manually below.'
+})
 // How many jobs on the board have a one-tap GO, and how many I could actually
 // dispatch right now (capped by free drivers and idle trucks).
-const goReadyCount = computed(() => sortedContracts.value.filter((c) => readyToGo(c)).length)
+const goReadyCount = computed(() => goReadyList.value.length)
 // How many jobs could ACTUALLY be dispatched at once — greedily allocate the
 // shared truck/driver/trailer pool so contracts competing for the same rig at
 // the same city aren't double-counted.
@@ -898,6 +915,18 @@ onUnmounted(() => clearInterval(poll))
 
     <!-- Compact, sortable contract table. Click a row's GO to dispatch. -->
     <div v-else-if="visibleContracts.length">
+      <!-- "Ready to GO only" is on but nothing is one-tap ready — we're showing
+           haulable jobs anyway so a free truck always has work in view. -->
+      <div
+        v-if="goFellBack"
+        class="glass mb-3 px-4 py-3 flex items-start gap-3 ring-1 ring-gold/40"
+      >
+        <span class="text-lg leading-none">⚡</span>
+        <div class="text-xs leading-relaxed">
+          <p class="text-slate-200 font-semibold">No job is one-tap ready right now.</p>
+          <p class="text-slate-400">{{ goBlockReason }} Showing jobs you can set up manually below.</p>
+        </div>
+      </div>
       <!-- Desktop: full sortable table (md and up) -->
       <div class="hidden md:block glass !p-0 overflow-hidden">
       <div class="overflow-x-auto">
