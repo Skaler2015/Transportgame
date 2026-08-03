@@ -25,6 +25,7 @@ const nav = [
   { to: '/fleet', label: 'Fleet & Dealership', icon: '▦' },
   { to: '/drivers', label: 'Crew', icon: '☺' },
   { to: '/warehouses', label: 'Warehouses', icon: '▢' },
+  { to: '/factories', label: 'Manufacturing', icon: '🏭' },
   { to: '/exchange', label: 'Exchange', icon: '⇄' },
   { to: '/missions', label: 'Missions', icon: '✓' },
   { to: '/finance', label: 'Finance', icon: '$' },

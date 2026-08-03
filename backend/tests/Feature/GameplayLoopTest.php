@@ -38,7 +38,13 @@ class GameplayLoopTest extends TestCase
     {
         $m = $vehicle->model;
 
-        return $c->commodity->canBeCarriedBy($m)
+        // Reachable on a full tank? A capacity-fit but out-of-range job can't be
+        // dispatched (the fuel guard rejects it), so it doesn't truly "fit".
+        $fuelOk = ($m->fuel_economy ?? 0) <= 0
+            || $c->distance_km * $m->fuel_economy <= $m->fuel_capacity + 0.001;
+
+        return $fuelOk
+            && $c->commodity->canBeCarriedBy($m)
             && $c->commodity->weight_per_unit * $c->units <= $vehicle->effectiveCapacityWeight()
             && $c->commodity->volume_per_unit * $c->units <= $vehicle->effectiveCapacityVolume();
     }

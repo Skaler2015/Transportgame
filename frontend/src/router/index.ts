@@ -15,6 +15,7 @@ const routes = [
       { path: 'fleet', name: 'fleet', component: () => import('../views/FleetView.vue') },
       { path: 'drivers', name: 'drivers', component: () => import('../views/DriversView.vue') },
       { path: 'warehouses', name: 'warehouses', component: () => import('../views/WarehousesView.vue') },
+      { path: 'factories', name: 'factories', component: () => import('../views/FactoriesView.vue') },
       { path: 'exchange', name: 'exchange', component: () => import('../views/ExchangeView.vue') },
       { path: 'missions', name: 'missions', component: () => import('../views/MissionsView.vue') },
       { path: 'finance', name: 'finance', component: () => import('../views/FinanceView.vue') },

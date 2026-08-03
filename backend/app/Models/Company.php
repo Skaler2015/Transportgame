@@ -77,6 +77,11 @@ class Company extends Model
         return $this->hasMany(Warehouse::class);
     }
 
+    public function factories(): HasMany
+    {
+        return $this->hasMany(Factory::class);
+    }
+
     public function contracts(): HasMany
     {
         return $this->hasMany(Contract::class);

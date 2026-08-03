@@ -14,7 +14,7 @@ return [
     // deploy the app notices the stored marker no longer matches and runs
     // `migrate --force` + `transoria:worldsync` once, so shared hosts that
     // never run the CLI still stay fully migrated. See EnsureSchemaUpToDate.
-    'schema_version' => '2026.08.16-ai-companies',
+    'schema_version' => '2026.08.17-manufacturing',
 
     // In-game currency label.
     'currency' => ['code' => 'CR', 'symbol' => '₡', 'name' => 'Credits'],
@@ -448,5 +448,48 @@ return [
             'Coromandel', 'Deccan', 'Ganges', 'Sahyadri', 'Konkan', 'Aravalli'],
         'name_suffixes' => ['Logistics', 'Freightways', 'Carriers', 'Transport', 'Haulage', 'Movers',
             'Cargo Lines', 'Roadways', 'Supply Co', 'Distribution', 'Forwarders'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Manufacturing (Phase — factories & supply chains)
+    |--------------------------------------------------------------------------
+    | A factory is built at one of the company's warehouses and, each cycle,
+    | turns cash (+ optional input commodities drawn from that warehouse) into
+    | output units deposited back into the warehouse — which the player then
+    | sells locally or hauls to a dearer market. Extractors have no commodity
+    | input (they bootstrap the chain); factories consume the outputs of other
+    | factories, so real chains emerge: sawmill → timber → furniture, or
+    | mine + electronics plant → auto plant. Production runs on the lazy tick.
+    |
+    | Costs are in integer cents (₡). Output/inputs/op-cost scale with level.
+    */
+    'manufacturing' => [
+        'cycle_seconds' => 300,       // one production cycle per 5 real minutes
+        'max_catchup_cycles' => 12,   // bound lazy catch-up after a quiet spell
+        'level_step' => 0.6,          // +60% throughput & cost per level above 1
+        'max_level' => 5,
+        'upgrade_cost_mult' => 0.75,  // upgrade costs 75% of build cost × level
+
+        'recipes' => [
+            // ---- Extractors (cash → raw output, no commodity input) ----------
+            'farm'            => ['name' => 'Grain Farm',        'icon' => '🌾', 'output' => 'grain',        'output_qty' => 40, 'inputs' => [], 'op_cost' => 800_00,  'build_cost' => 400000_00,  'upkeep' => 1200_00, 'unlock' => 1],
+            'water_plant'     => ['name' => 'Bottling Plant',    'icon' => '💧', 'output' => 'bottled_water','output_qty' => 60, 'inputs' => [], 'op_cost' => 600_00,  'build_cost' => 300000_00,  'upkeep' => 900_00,  'unlock' => 1],
+            'textile_mill'    => ['name' => 'Textile Mill',      'icon' => '🧵', 'output' => 'textiles',     'output_qty' => 22, 'inputs' => [], 'op_cost' => 1600_00, 'build_cost' => 700000_00,  'upkeep' => 1800_00, 'unlock' => 1],
+            'quarry'          => ['name' => 'Cement Quarry',     'icon' => '⛏️', 'output' => 'cement',       'output_qty' => 30, 'inputs' => [], 'op_cost' => 1000_00, 'build_cost' => 500000_00,  'upkeep' => 1500_00, 'unlock' => 2],
+            'sawmill'         => ['name' => 'Sawmill',           'icon' => '🪵', 'output' => 'timber',       'output_qty' => 26, 'inputs' => [], 'op_cost' => 1200_00, 'build_cost' => 550000_00,  'upkeep' => 1600_00, 'unlock' => 2],
+            'mine'            => ['name' => 'Steel Mine',        'icon' => '⚒️', 'output' => 'steel_coil',   'output_qty' => 16, 'inputs' => [], 'op_cost' => 2400_00, 'build_cost' => 1100000_00, 'upkeep' => 2600_00, 'unlock' => 3],
+            'electronics_plant' => ['name' => 'Electronics Plant','icon' => '🔌','output' => 'electronics',  'output_qty' => 12, 'inputs' => [], 'op_cost' => 5200_00, 'build_cost' => 1600000_00, 'upkeep' => 3200_00, 'unlock' => 3],
+            'pharma_lab'      => ['name' => 'Pharma Lab',        'icon' => '💊', 'output' => 'medicine',     'output_qty' => 8,  'inputs' => [], 'op_cost' => 6000_00, 'build_cost' => 1800000_00, 'upkeep' => 3600_00, 'unlock' => 4, 'needs' => 'cold'],
+            'oil_well'        => ['name' => 'Oil Well',          'icon' => '🛢️', 'output' => 'crude_oil',    'output_qty' => 20, 'inputs' => [], 'op_cost' => 2600_00, 'build_cost' => 1200000_00, 'upkeep' => 2800_00, 'unlock' => 5, 'needs' => 'hazmat'],
+
+            // ---- Factories (consume other outputs → finished goods) ----------
+            'furniture_factory' => ['name' => 'Furniture Factory','icon' => '🪑','output' => 'furniture',   'output_qty' => 14, 'inputs' => ['timber' => 20],                       'op_cost' => 1400_00, 'build_cost' => 800000_00,  'upkeep' => 2000_00, 'unlock' => 2],
+            'machinery_works' => ['name' => 'Machinery Works',   'icon' => '⚙️', 'output' => 'machinery',    'output_qty' => 10, 'inputs' => ['steel_coil' => 14],                  'op_cost' => 3000_00, 'build_cost' => 1700000_00, 'upkeep' => 3400_00, 'unlock' => 4],
+            'refinery'        => ['name' => 'Oil Refinery',      'icon' => '🏭', 'output' => 'fuel',         'output_qty' => 16, 'inputs' => ['crude_oil' => 18],                   'op_cost' => 1800_00, 'build_cost' => 1500000_00, 'upkeep' => 3000_00, 'unlock' => 5, 'needs' => 'hazmat'],
+            'chemical_plant'  => ['name' => 'Chemical Plant',    'icon' => '⚗️', 'output' => 'chemicals',    'output_qty' => 14, 'inputs' => ['crude_oil' => 16],                   'op_cost' => 2000_00, 'build_cost' => 1500000_00, 'upkeep' => 3000_00, 'unlock' => 6, 'needs' => 'hazmat'],
+            'solar_factory'   => ['name' => 'Solar Factory',     'icon' => '☀️', 'output' => 'solar_panels', 'output_qty' => 10, 'inputs' => ['electronics' => 12],                 'op_cost' => 2400_00, 'build_cost' => 1600000_00, 'upkeep' => 3200_00, 'unlock' => 5],
+            'auto_plant'      => ['name' => 'Auto Plant',        'icon' => '🚗', 'output' => 'automobiles',  'output_qty' => 4,  'inputs' => ['steel_coil' => 10, 'electronics' => 8],'op_cost' => 6000_00, 'build_cost' => 2500000_00, 'upkeep' => 5000_00, 'unlock' => 6],
+        ],
     ],
 ];

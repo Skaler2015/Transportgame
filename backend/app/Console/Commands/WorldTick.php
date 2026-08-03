@@ -55,7 +55,8 @@ class WorldTick extends Command
             });
 
         // 4. Per-company upkeep: rest drivers, accrue loan interest, top up missions.
-        DB::table('companies')->where('is_ai', false)->orderBy('id')->pluck('id')->each(function ($id) use ($shipments, $finance, $missions) {
+        $manufacturing = app(\App\Services\ManufacturingService::class);
+        DB::table('companies')->where('is_ai', false)->orderBy('id')->pluck('id')->each(function ($id) use ($shipments, $finance, $missions, $manufacturing) {
             $company = Company::find($id);
             if (! $company) {
                 return;
@@ -63,6 +64,7 @@ class WorldTick extends Command
             $shipments->restDrivers($company);
             $finance->accrueInterest($company);
             $missions->ensure($company);
+            $manufacturing->produceDue($company);
         });
 
         // 4b. Advance rival AI companies (keep rosters full, step their economy).

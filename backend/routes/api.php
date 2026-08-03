@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\ResearchController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\TrailerController;
+use App\Http\Controllers\Api\FactoryController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\WorldController;
 use Illuminate\Support\Facades\Route;
@@ -106,6 +107,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/warehouses/{warehouse}/upgrade', [WarehouseController::class, 'upgrade']);
     Route::post('/warehouses/{warehouse}/buy', [WarehouseController::class, 'buy']);
     Route::post('/warehouses/{warehouse}/sell', [WarehouseController::class, 'sell']);
+
+    // Manufacturing: factories that turn cash + inputs into finished goods.
+    Route::get('/factories', [FactoryController::class, 'index']);
+    Route::post('/factories', [FactoryController::class, 'build']);
+    Route::post('/factories/{factory}/upgrade', [FactoryController::class, 'upgrade']);
+    Route::post('/factories/{factory}/toggle', [FactoryController::class, 'toggle']);
 
     // Missions.
     Route::get('/missions', [MissionController::class, 'index']);
