@@ -175,15 +175,19 @@ const serviceOpen = ref(false)
 function vehicleFixTotal(v: Vehicle): number {
   return vehicleNeeds(v).reduce((sum, need) => sum + needCost(v, need), 0)
 }
-const allFixTotal = computed(() =>
-  vehiclesNeedingFix.value.reduce((sum, v) => sum + vehicleFixTotal(v), 0),
-)
 // Every trailer that isn't on the road — including worn-out ones (condition
 // too low to count as "available"), so the player can repair them from here.
 const freeTrailers = computed(() => trailers.value.filter((t) => t.status !== 'en_route'))
 function trailerNeedsRepair(t: Trailer): boolean {
   return (t.condition ?? 100) < 90
 }
+// Idle trailers that need a repair — folded into the "need service" alert.
+const trailersNeedingFix = computed(() => freeTrailers.value.filter((t) => trailerNeedsRepair(t)))
+// Combined bill to fix every listed vehicle AND trailer.
+const allFixTotal = computed(() =>
+  vehiclesNeedingFix.value.reduce((sum, v) => sum + vehicleFixTotal(v), 0)
+  + trailersNeedingFix.value.reduce((sum, t) => sum + (t.repair_cost ?? 0), 0),
+)
 const servingTrailer = ref<number | null>(null)
 async function fixTrailer(t: Trailer) {
   servingTrailer.value = t.id
@@ -219,7 +223,11 @@ async function fixAllVehicles() {
         else await api.post(`/vehicles/${v.id}/service`, { type: need })
       }
     }
-    toast.success('All vehicles serviced.')
+    // Repair worn trailers too, so "Fix all" clears the whole alert.
+    for (const t of [...trailersNeedingFix.value]) {
+      await api.post(`/trailers/${t.id}/repair`)
+    }
+    toast.success('All vehicles & trailers serviced.')
     await loadFleet(); game.refreshDashboard().catch(() => {})
   } catch (e) { toast.error(apiError(e)); await loadFleet().catch(() => {}) } finally { bulkFixing.value = false }
 }
@@ -709,12 +717,12 @@ onUnmounted(() => clearInterval(poll))
       </div>
     </div>
 
-    <!-- Alert (all screens): free vehicles that need service. Tap to expand the
-         list right here and fix each one in place — no scrolling to a panel. -->
-    <div v-if="vehiclesNeedingFix.length" class="glass !p-3 ring-1 ring-gold/40">
+    <!-- Alert (all screens): free vehicles & trailers that need service. Tap to
+         expand and fix each in place — no scrolling to another panel. -->
+    <div v-if="vehiclesNeedingFix.length || trailersNeedingFix.length" class="glass !p-3 ring-1 ring-gold/40">
       <div class="w-full flex items-center justify-between gap-2">
         <button type="button" class="text-sm text-gold text-left flex-1 min-w-0" @click="serviceOpen = !serviceOpen">
-          🛠 {{ vehiclesNeedingFix.length }} vehicle(s) need service
+          🛠 {{ vehiclesNeedingFix.length }} vehicle<template v-if="trailersNeedingFix.length"> · {{ trailersNeedingFix.length }} trailer</template>(s) need service
           <span class="font-mono">· {{ credits(allFixTotal) }}</span>
         </button>
         <button type="button" class="btn-primary !py-1 !px-3 text-[11px] shrink-0"
@@ -749,6 +757,21 @@ onUnmounted(() => clearInterval(poll))
               class="chip bg-brand/20 text-brand-soft hover:bg-brand/30 text-[10px] ml-auto disabled:opacity-40"
               :disabled="servingVeh === v.id || bulkFixing" @click="fixAllForVehicle(v)">
               {{ servingVeh === v.id ? 'Fixing…' : '🔧 Fix all' }}<span class="font-mono ml-1">{{ credits(vehicleFixTotal(v)) }}</span>
+            </button>
+          </div>
+        </div>
+        <!-- Trailers that need a repair, right in the same alert. -->
+        <div v-for="t in trailersNeedingFix" :key="'t'+t.id" class="py-2">
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-xs font-medium truncate">🚚 {{ t.nickname || t.model?.name }}</p>
+            <span class="text-[11px] shrink-0" :class="'text-loss'">🔧 {{ Math.round(t.condition ?? 100) }}%</span>
+          </div>
+          <div class="flex items-center gap-1 mt-1">
+            <span class="text-[11px] text-slate-400">📍 {{ t.city?.name || '—' }}</span>
+            <button type="button"
+              class="chip bg-gold/15 text-gold hover:bg-gold/25 text-[10px] ml-auto disabled:opacity-40"
+              :disabled="servingTrailer === t.id || bulkFixing" @click="fixTrailer(t)">
+              🔧 {{ servingTrailer === t.id ? 'Repairing…' : 'Repair' }}<span v-if="t.repair_cost" class="font-mono ml-1">{{ credits(t.repair_cost) }}</span>
             </button>
           </div>
         </div>
