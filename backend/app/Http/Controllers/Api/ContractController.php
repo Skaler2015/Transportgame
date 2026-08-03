@@ -91,10 +91,17 @@ class ContractController extends Controller
             }
         }
 
+        // On a dense map the 300-row cap could drop a backhaul, so always pull
+        // jobs leaving a city where a truck is (or is heading) to the front.
+        if ($fleetCityIds->isNotEmpty()) {
+            $ids = $fleetCityIds->keys()->map(fn ($x) => (int) $x)->implode(',');
+            $query->orderByRaw("CASE WHEN origin_city_id IN ($ids) THEN 0 ELSE 1 END");
+        }
         $sort = $filters['sort'] ?? 'payout';
-        $query->orderByDesc($sort === 'payout' ? 'payout' : $sort);
-        if ($sort !== 'payout') {
-            $query->reorder()->orderBy($sort);
+        if ($sort === 'payout') {
+            $query->orderByDesc('payout');
+        } else {
+            $query->orderBy($sort);
         }
 
         $wantHaulable = filter_var($filters['haulable'] ?? false, FILTER_VALIDATE_BOOLEAN);
