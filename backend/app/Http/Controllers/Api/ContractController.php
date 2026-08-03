@@ -139,7 +139,9 @@ class ContractController extends Controller
             fn (Contract $c) => $c->at_fleet_city ? ($c->fleet_arriving ? 1 : 2) : 0
         );
 
-        return ContractResource::collection($contracts->take(60)->values());
+        // Show a big slice of the board — with 100+ cities there's always
+        // plenty of work, so surface at least ~120 jobs at once.
+        return ContractResource::collection($contracts->take(120)->values());
     }
 
     /**
