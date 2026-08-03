@@ -18,7 +18,7 @@ const route = useRoute()
 const mobileOpen = ref(false)
 watch(() => route.fullPath, () => (mobileOpen.value = false))
 
-const nav = [
+const baseNav = [
   { to: '/dashboard', label: 'Dashboard', icon: '◧' },
   { to: '/contracts', label: 'Contract Market', icon: '▤' },
   { to: '/operations', label: 'Operations', icon: '⟳' },
@@ -41,6 +41,10 @@ const nav = [
   { to: '/leaderboard', label: 'Leaderboard', icon: '♛' },
   { to: '/settings', label: 'Settings', icon: '⚙' },
 ]
+// Operators additionally see the Admin control room.
+const nav = computed(() => auth.user?.is_admin
+  ? [...baseNav, { to: '/admin', label: 'Admin', icon: '🛡️' }]
+  : baseNav)
 
 // Bottom tab bar for mobile — the core gameplay loop, one tap away. The
 // 5th slot opens the full drawer with every section.

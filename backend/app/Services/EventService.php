@@ -36,26 +36,42 @@ class EventService
             $weighted = array_merge($weighted, array_fill(0, $def['weight'], $type));
         }
         $type = $weighted[array_rand($weighted)];
-        $def = $catalog[$type];
 
-        [$minH, $maxH] = $def['duration_hours'];
+        [$minH, $maxH] = $catalog[$type]['duration_hours'];
         $regions = City::query()->distinct()->pluck('region');
         $scopeRegion = mt_rand() / mt_getrandmax() < 0.6 ? $regions->random() : null;
 
+        return $this->spawn($type, $scopeRegion, random_int($minH, $maxH));
+    }
+
+    /**
+     * Spawn a specific event type (used by the admin panel and by maybeSpawn).
+     * A null region is continental (world-wide). Returns the created event, or
+     * null if the type is unknown.
+     */
+    public function spawn(string $type, ?string $region = null, ?int $hours = null): ?WorldEvent
+    {
+        $def = config('transoria.events.'.$type);
+        if (! $def) {
+            return null;
+        }
+
+        [$minH, $maxH] = $def['duration_hours'];
+        $hours ??= random_int($minH, $maxH);
         $mods = $def['modifiers'];
 
         return WorldEvent::create([
             'type' => $type,
-            'title' => $def['title'].($scopeRegion ? " — {$scopeRegion}" : ' (Continental)'),
-            'description' => $this->describe($type, $scopeRegion),
+            'title' => $def['title'].($region ? " — {$region}" : ' (Continental)'),
+            'description' => $this->describe($type, $region),
             'severity' => $def['severity'],
-            'region' => $scopeRegion,
+            'region' => $region,
             'price_modifier' => $mods['price_modifier'] ?? 1.0,
             'demand_modifier' => $mods['demand_modifier'] ?? 1.0,
             'fuel_modifier' => $mods['fuel_modifier'] ?? 1.0,
             'risk_modifier' => $mods['risk_modifier'] ?? 1.0,
             'starts_at' => now(),
-            'ends_at' => now()->addHours(random_int($minH, $maxH)),
+            'ends_at' => now()->addHours(max(1, $hours)),
         ]);
     }
 

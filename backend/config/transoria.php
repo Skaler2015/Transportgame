@@ -14,7 +14,11 @@ return [
     // deploy the app notices the stored marker no longer matches and runs
     // `migrate --force` + `transoria:worldsync` once, so shared hosts that
     // never run the CLI still stay fully migrated. See EnsureSchemaUpToDate.
-    'schema_version' => '2026.08.17-manufacturing',
+    'schema_version' => '2026.08.18-admin',
+
+    // Emails that should be granted the admin role on deploy (WorldSync applies
+    // this). Set ADMIN_EMAILS in the environment as a comma-separated list.
+    'admin_emails' => array_values(array_filter(array_map('trim', explode(',', (string) env('ADMIN_EMAILS', ''))))),
 
     // In-game currency label.
     'currency' => ['code' => 'CR', 'symbol' => '₡', 'name' => 'Credits'],

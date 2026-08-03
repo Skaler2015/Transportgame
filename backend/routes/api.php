@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AccountsController;
 use App\Http\Controllers\Api\AchievementController;
 use App\Http\Controllers\Api\AdvisorController;
+use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\ContractController;
@@ -53,9 +54,23 @@ Route::get('/market/overview', [MarketController::class, 'overview']);
 Route::post('/dev/tick', [DevController::class, 'tick']);
 
 // --- Authenticated -------------------------------------------------------
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'not_banned'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // --- Admin panel (operator only) -------------------------------------
+    Route::middleware('admin')->prefix('admin')->group(function () {
+        Route::get('/dashboard', [AdminController::class, 'dashboard']);
+        Route::get('/users', [AdminController::class, 'users']);
+        Route::post('/users/{user}/ban', [AdminController::class, 'banUser']);
+        Route::post('/users/{user}/admin', [AdminController::class, 'toggleAdmin']);
+        Route::get('/events', [AdminController::class, 'events']);
+        Route::post('/events', [AdminController::class, 'spawnEvent']);
+        Route::post('/events/{event}/end', [AdminController::class, 'endEvent']);
+        Route::post('/economy/fuel', [AdminController::class, 'setFuel']);
+        Route::post('/tick', [AdminController::class, 'tick']);
+        Route::get('/live', [AdminController::class, 'live']);
+    });
 
     Route::get('/company', [CompanyController::class, 'show']);
     Route::post('/company/country', [CompanyController::class, 'updateCountry']);

@@ -77,7 +77,7 @@ class AuthController extends Controller
         $company = $user->company;
 
         return response()->json([
-            'user' => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email],
+            'user' => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email, 'is_admin' => $user->isAdmin()],
             'company' => $company
                 ? new CompanyResource($company->loadCount('vehicles', 'drivers')->load('headquarters'))
                 : null,

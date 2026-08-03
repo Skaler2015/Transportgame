@@ -17,6 +17,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // apply any pending migrations + world sync so shared hosts that never
         // run Artisan stay up to date. Cheap no-op once the marker matches.
         $middleware->append(\App\Http\Middleware\EnsureSchemaUpToDate::class);
+
+        $middleware->alias([
+            'admin' => \App\Http\Middleware\EnsureAdmin::class,
+            'not_banned' => \App\Http\Middleware\EnsureNotBanned::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

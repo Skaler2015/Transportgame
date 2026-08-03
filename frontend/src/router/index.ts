@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { getToken } from '../api/client'
+import { useAuthStore } from '../stores/auth'
 
 const routes = [
   { path: '/login', name: 'login', component: () => import('../views/AuthView.vue'), meta: { guest: true } },
@@ -29,6 +30,7 @@ const routes = [
       { path: 'news', name: 'news', component: () => import('../views/NewsView.vue') },
       { path: 'advisor', name: 'advisor', component: () => import('../views/AdvisorView.vue') },
       { path: 'leaderboard', name: 'leaderboard', component: () => import('../views/LeaderboardView.vue') },
+      { path: 'admin', name: 'admin', component: () => import('../views/AdminView.vue'), meta: { admin: true } },
       { path: 'settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
     ],
   },
@@ -43,5 +45,10 @@ router.beforeEach((to) => {
   const authed = !!getToken()
   if (to.meta.auth && !authed) return { name: 'login' }
   if (to.meta.guest && authed) return { name: 'dashboard' }
+  // Admin panel is operator-only; the backend also enforces this.
+  if (to.meta.admin) {
+    const auth = useAuthStore()
+    if (auth.user && !auth.user.is_admin) return { name: 'dashboard' }
+  }
   return true
 })

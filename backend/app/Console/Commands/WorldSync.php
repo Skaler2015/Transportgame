@@ -144,6 +144,16 @@ class WorldSync extends Command
         ]);
         $this->info("Licensed {$licensed} existing drivers.");
 
+        // Grant the admin role to any configured operator emails (ADMIN_EMAILS).
+        $adminEmails = config('transoria.admin_emails', []);
+        if (! empty($adminEmails)) {
+            $granted = \App\Models\User::whereIn('email', $adminEmails)
+                ->where('is_admin', false)->update(['is_admin' => true]);
+            if ($granted) {
+                $this->info("Granted admin to {$granted} operator account(s).");
+            }
+        }
+
         // 9. Populate the world with rival AI companies so the leaderboard and
         //    market are alive from the first deploy. Idempotent (tops up only).
         try {
