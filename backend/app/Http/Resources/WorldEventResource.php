@@ -16,6 +16,7 @@ class WorldEventResource extends JsonResource
             'description' => $this->description,
             'severity' => $this->severity,
             'region' => $this->region,
+            'city_id' => $this->city_id,
             'starts_at' => $this->starts_at?->toIso8601String(),
             'ends_at' => $this->ends_at?->toIso8601String(),
         ];
