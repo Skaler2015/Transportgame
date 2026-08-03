@@ -11,6 +11,7 @@ use App\Models\Shipment;
 use App\Models\Vehicle;
 use App\Models\WorldEvent;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -184,10 +185,73 @@ class EconomyService
      * Refill the open-contract market so each producing city keeps roughly
      * `target_open_per_hub` live offers. Returns the number created.
      */
+    /**
+     * A market "pulse" that shifts every hour — busy daytime hours pay a
+     * premium, quiet nights a discount, plus a stable-within-the-hour random
+     * shock. Stable for a whole clock hour, different the next. Bounded so
+     * pricing never runs away.
+     */
+    public function hourlyMarketPulse(): float
+    {
+        $hour = (int) now()->hour;
+        // Rhythm of the trading day: peak ~2pm, trough ~2am.
+        $timeOfDay = 1.0 + 0.12 * sin(($hour - 8) / 24 * 2 * M_PI);
+        // Deterministic shock for THIS calendar hour (± ~12%).
+        $seed = (int) now()->format('YmdH');
+        $shock = ((abs(crc32((string) $seed)) % 1000) / 1000 - 0.5) * 0.24;
+
+        return round(max(0.82, min(1.28, $timeOfDay + $shock)), 4);
+    }
+
+    /**
+     * Re-price open, unclaimed jobs to the current hour's pulse, keeping every
+     * one above its loss floor. Returns how many payouts changed.
+     */
+    public function repriceOpenContracts(): int
+    {
+        $pulse = $this->hourlyMarketPulse();
+        $minPayout = (int) config('transoria.contracts.min_payout', 0);
+        $penaltyPct = (float) config('transoria.contracts.penalty_pct', 0.5);
+        $rateLo = (float) config('transoria.contracts.rate_per_km_min', 5.0);
+        $touched = 0;
+
+        Contract::where('status', Contract::STATUS_OPEN)
+            ->whereNull('company_id')
+            ->whereNotNull('base_payout')
+            ->with(['origin:id,toll_per_km,fuel_price', 'destination:id,toll_per_km,tax_rate'])
+            ->chunkById(500, function ($contracts) use ($pulse, $minPayout, $penaltyPct, $rateLo, &$touched) {
+                foreach ($contracts as $c) {
+                    if (! $c->origin || ! $c->destination) {
+                        continue;
+                    }
+                    $avgToll = (($c->origin->toll_per_km ?? 0) + ($c->destination->toll_per_km ?? 0)) / 2;
+                    $tollExpense = $c->distance_km * $avgToll;
+                    $fuelExpense = $c->distance_km * 0.30 * ($c->origin->fuel_price ?? 1.0);
+                    $denom = max(0.15, 1 - (float) ($c->destination->tax_rate ?? 0) - 0.20);
+                    $floor = (int) round((($tollExpense + $fuelExpense) / $denom) * 100);
+                    $kmFloor = (int) round($c->distance_km * $rateLo * 100);
+
+                    $new = max($minPayout, $floor, $kmFloor, (int) round($c->base_payout * $pulse));
+                    if ($new !== (int) $c->payout) {
+                        $c->update(['payout' => $new, 'penalty' => (int) round($new * $penaltyPct)]);
+                        $touched++;
+                    }
+                }
+            });
+
+        return $touched;
+    }
+
     public function replenishContracts(Collection $events): int
     {
         $cfg = config('transoria.contracts');
         $created = 0;
+
+        // Re-price the whole open board to the current hour's pulse — at most
+        // once per clock hour, so prices visibly shift hour to hour.
+        if (Cache::add('market:reprice:'.now()->format('YmdH'), 1, now()->addMinutes(70))) {
+            $this->repriceOpenContracts();
+        }
 
         // Retire any open jobs below the current payout floor so the market
         // only ever shows contracts worth at least the minimum.
@@ -362,6 +426,12 @@ class EconomyService
         }
         $payout *= 1 + ($difficulty - 1) * 0.06;
 
+        // The market base (pre-pulse) — stored so the live payout can be repriced
+        // each hour. The current payout is this scaled by the hourly pulse, but
+        // never below the ₹/km flat floor even in the quietest market.
+        $marketBase = $payout;
+        $payout = max($payout * $this->hourlyMarketPulse(), $distance * $rateLo);
+
         // GUARANTEE the job clears its own running costs. Tolls (and, to a lesser
         // extent, tax + fuel) can eat a long haul; bump the payout so it always
         // leaves a healthy net margin — no contract is ever a loss.
@@ -387,6 +457,8 @@ class EconomyService
         // No job pays under the configured floor.
         $payoutCents = max((int) ($cfg['min_payout'] ?? 0), $payoutCents);
         $penaltyCents = (int) round($payoutCents * $cfg['penalty_pct']);
+        // Store the market base (pre-pulse) so the payout can reprice each hour.
+        $baseCents = max((int) ($cfg['min_payout'] ?? 0), (int) round($marketBase * 100));
 
         // Deadline: ideal time at reference speed, padded by slack.
         $idealHours = $distance / $cfg['deadline_speed_kmh'];
@@ -402,6 +474,7 @@ class EconomyService
             'units' => $units,
             'distance_km' => $distance,
             'payout' => $payoutCents,
+            'base_payout' => $baseCents,
             'penalty' => $penaltyCents,
             'reputation_reward' => 3 + $difficulty * 2,
             'difficulty' => $difficulty,
