@@ -10,6 +10,7 @@ use App\Models\City;
 use App\Models\Commodity;
 use App\Models\Company;
 use App\Models\WorldEvent;
+use App\Services\AiCompanyService;
 use Illuminate\Http\Request;
 
 class WorldController extends Controller
@@ -44,15 +45,25 @@ class WorldController extends Controller
         return WorldEventResource::collection(WorldEvent::active()->orderByDesc('starts_at')->get());
     }
 
-    /** Top companies by estimated value for the leaderboard. */
-    public function leaderboard(Request $request)
+    /**
+     * Leaderboard of every firm — human and AI — ranked by reputation then cash.
+     * Doubles as the lazy tick for rival companies: viewing the world nudges the
+     * AI economy forward (rate-limited inside stepDue).
+     */
+    public function leaderboard(Request $request, AiCompanyService $ai)
     {
+        $ai->stepDue($request->user()?->company?->country);
+
+        // Whole-world revenue drives market-share fractions.
+        $worldRevenue = (int) Company::sum('lifetime_revenue');
+
         $companies = Company::query()
             ->withCount('vehicles')
             ->orderByDesc('reputation')
             ->orderByDesc('cash')
             ->limit(50)
             ->get()
+            ->values()
             ->map(fn (Company $c, int $i) => [
                 'rank' => $i + 1,
                 'name' => $c->name,
@@ -61,9 +72,19 @@ class WorldController extends Controller
                 'reputation' => $c->reputation,
                 'value' => $c->estimatedValue(),
                 'shipments_completed' => $c->shipments_completed,
-                'fleet_size' => $c->vehicles_count,
+                'fleet_size' => $c->isAi() ? (int) $c->ai_fleet_size : (int) $c->vehicles_count,
+                'is_ai' => $c->isAi(),
+                'strategy' => $c->isAi() ? $c->ai_strategy : null,
+                'market_share' => $worldRevenue > 0 ? round($c->lifetime_revenue / $worldRevenue, 4) : 0,
             ]);
 
-        return response()->json(['data' => $companies]);
+        return response()->json([
+            'data' => $companies,
+            'meta' => [
+                'total_firms' => (int) Company::count(),
+                'ai_firms' => (int) Company::ai()->whereNull('ai_bankrupt_at')->count(),
+                'world_revenue' => $worldRevenue,
+            ],
+        ]);
     }
 }

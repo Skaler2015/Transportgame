@@ -30,6 +30,7 @@ class WorldTick extends Command
         ShipmentService $shipments,
         FinanceService $finance,
         MissionService $missions,
+        \App\Services\AiCompanyService $aiCompanies,
     ): int {
         $start = microtime(true);
 
@@ -54,7 +55,7 @@ class WorldTick extends Command
             });
 
         // 4. Per-company upkeep: rest drivers, accrue loan interest, top up missions.
-        DB::table('companies')->orderBy('id')->pluck('id')->each(function ($id) use ($shipments, $finance, $missions) {
+        DB::table('companies')->where('is_ai', false)->orderBy('id')->pluck('id')->each(function ($id) use ($shipments, $finance, $missions) {
             $company = Company::find($id);
             if (! $company) {
                 return;
@@ -63,6 +64,10 @@ class WorldTick extends Command
             $finance->accrueInterest($company);
             $missions->ensure($company);
         });
+
+        // 4b. Advance rival AI companies (keep rosters full, step their economy).
+        $aiCompanies->ensureRoster(config('transoria.default_country', 'IN'));
+        $aiCompanies->stepAll();
 
         // 5. Contract market housekeeping + expire stale exchange listings.
         $expired = $economy->expireStaleContracts();

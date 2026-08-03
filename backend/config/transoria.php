@@ -14,7 +14,7 @@ return [
     // deploy the app notices the stored marker no longer matches and runs
     // `migrate --force` + `transoria:worldsync` once, so shared hosts that
     // never run the CLI still stay fully migrated. See EnsureSchemaUpToDate.
-    'schema_version' => '2026.08.15-hourly-pricing',
+    'schema_version' => '2026.08.16-ai-companies',
 
     // In-game currency label.
     'currency' => ['code' => 'CR', 'symbol' => '₡', 'name' => 'Credits'],
@@ -382,5 +382,61 @@ return [
             'duration_hours' => [12, 36],
             'modifiers' => ['price_modifier' => 1.7, 'demand_modifier' => 0.6],
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | AI companies (Phase 1 — autonomous competitors)
+    |--------------------------------------------------------------------------
+    | Rival logistics firms that live in the same shared world as players. They
+    | are ordinary `companies` rows flagged `is_ai`, owned by one system user,
+    | with their fleet modelled as a single `ai_fleet_size` counter (NOT one
+    | Vehicle row each) so hundreds of rivals cost almost nothing on shared
+    | hosting. Their economy is stepped in game-hours during the lazy world
+    | tick, deterministically (crc32 of id+hour) so catch-up is reproducible.
+    */
+    'ai' => [
+        // Target number of live (non-bankrupt) rivals per country.
+        'roster_size' => 24,
+        // Real seconds between roster/step passes (rate-limits the lazy hook).
+        'step_cooldown_seconds' => 20,
+        // Cap how many game-hours a single catch-up may simulate, so a long
+        // quiet period can't spike one request into a huge loop.
+        'max_catchup_hours' => 12,
+
+        // Starting endowment for a freshly founded rival.
+        'seed_cash' => [180000_00, 900000_00],   // cents, [min, max]
+        'seed_fleet' => [3, 14],
+        'seed_reputation' => [420, 760],
+
+        // Per-truck economics per simulated game-hour (cents).
+        'revenue_per_truck_hour' => 4200_00,
+        'cost_per_truck_hour' => 2650_00,
+        'overhead_per_hour' => 5200_00,          // head-office burn, flat
+        'deliveries_per_truck_day' => 6,         // for shipments_completed drift
+
+        // Expansion: when cash clears this, a growth-minded rival buys trucks.
+        'expand_cash_floor' => 600000_00,
+        'truck_capex' => 220000_00,              // cost to add one truck
+        'expand_batch' => [1, 3],
+
+        // Bankruptcy: rivals in the red for this many consecutive game-hours
+        // fold, then a fresh firm is founded to keep the roster full.
+        'bankrupt_after_hours' => 18,
+
+        // Behaviour archetypes and how they bend the numbers. Weighted pick.
+        'strategies' => [
+            'expander'   => ['weight' => 3, 'revenue' => 1.05, 'cost' => 1.08, 'expand' => 1.6, 'rep_target' => 600],
+            'undercutter'=> ['weight' => 3, 'revenue' => 0.88, 'cost' => 0.82, 'expand' => 1.0, 'rep_target' => 520],
+            'premium'    => ['weight' => 2, 'revenue' => 1.22, 'cost' => 1.12, 'expand' => 0.7, 'rep_target' => 820],
+            'regional'   => ['weight' => 2, 'revenue' => 0.98, 'cost' => 0.95, 'expand' => 0.9, 'rep_target' => 640],
+        ],
+
+        // Name generator parts for founding believable rivals.
+        'name_prefixes' => ['Apex', 'Meridian', 'Vanguard', 'Orient', 'Summit', 'Ironclad', 'Falcon',
+            'Continental', 'Pioneer', 'Crest', 'Nexus', 'Titan', 'Horizon', 'Cargo', 'Bharat', 'Indus',
+            'Coromandel', 'Deccan', 'Ganges', 'Sahyadri', 'Konkan', 'Aravalli'],
+        'name_suffixes' => ['Logistics', 'Freightways', 'Carriers', 'Transport', 'Haulage', 'Movers',
+            'Cargo Lines', 'Roadways', 'Supply Co', 'Distribution', 'Forwarders'],
     ],
 ];

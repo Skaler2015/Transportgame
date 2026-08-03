@@ -144,6 +144,16 @@ class WorldSync extends Command
         ]);
         $this->info("Licensed {$licensed} existing drivers.");
 
+        // 9. Populate the world with rival AI companies so the leaderboard and
+        //    market are alive from the first deploy. Idempotent (tops up only).
+        try {
+            $founded = app(\App\Services\AiCompanyService::class)
+                ->ensureRoster(config('transoria.default_country', 'IN'));
+            $this->info("Founded {$founded} rival AI companies.");
+        } catch (\Throwable $e) {
+            $this->warn('AI roster seed skipped: '.$e->getMessage());
+        }
+
         $this->info('World sync complete.');
 
         return self::SUCCESS;

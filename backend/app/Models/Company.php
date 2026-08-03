@@ -26,7 +26,28 @@ class Company extends Model
         'missions_generated_at' => 'datetime',
         'onboarded_at' => 'datetime',
         'tutorial_step' => 'integer',
+        'is_ai' => 'boolean',
+        'ai_fleet_size' => 'integer',
+        'ai_state' => 'array',
+        'ai_bankrupt_at' => 'datetime',
     ];
+
+    /** Rival firms run by the world, not by a human player. */
+    public function scopeAi($query)
+    {
+        return $query->where('is_ai', true);
+    }
+
+    /** Human-owned companies only (everything the player sees as "theirs"). */
+    public function scopeHuman($query)
+    {
+        return $query->where('is_ai', false);
+    }
+
+    public function isAi(): bool
+    {
+        return (bool) $this->is_ai;
+    }
 
     // XP required to reach the NEXT level from the given level.
     public const XP_CURVE_BASE = 1000;
@@ -105,6 +126,14 @@ class Company extends Model
     /** Estimated net worth: cash + fleet value + warehouses - debt. */
     public function estimatedValue(): int
     {
+        // AI rivals hold their fleet as a counter, not Vehicle rows — value it
+        // at the standard truck price so they rank fairly against players.
+        if ($this->isAi()) {
+            $truck = (int) config('transoria.ai.truck_capex', 220000_00);
+
+            return (int) ($this->cash + $this->ai_fleet_size * $truck - $this->debt);
+        }
+
         $fleet = $this->vehicles()
             ->join('vehicle_models', 'vehicles.vehicle_model_id', '=', 'vehicle_models.id')
             ->sum('vehicle_models.price');
