@@ -4,12 +4,16 @@ const toast = useToastStore()
 </script>
 
 <template>
-  <div class="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 w-80">
+  <!-- Toasts appear at the TOP, just below the header, centred. -->
+  <div
+    class="fixed left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 w-[calc(100%-1.5rem)] max-w-sm"
+    style="top: calc(env(safe-area-inset-top) + 4.25rem)"
+  >
     <TransitionGroup name="toast">
       <div
         v-for="t in toast.items"
         :key="t.id"
-        class="glass px-4 py-3 flex items-start gap-3 animate-slide-up cursor-pointer"
+        class="glass px-4 py-3 flex items-start gap-3 cursor-pointer shadow-glass"
         @click="toast.dismiss(t.id)"
       >
         <span
@@ -34,6 +38,6 @@ const toast = useToastStore()
 .toast-enter-from,
 .toast-leave-to {
   opacity: 0;
-  transform: translateX(20px);
+  transform: translateY(-16px);
 }
 </style>
