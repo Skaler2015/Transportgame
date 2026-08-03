@@ -109,17 +109,22 @@ class ContractController extends Controller
 
         $contracts = $query->limit(300)->get();
 
-        // "Only what my fleet can haul" means what an IDLE truck can take RIGHT
-        // NOW — so a small free truck sees the light loads it can actually
-        // dispatch, not heavy jobs only a bigger truck (still en route) could do.
+        // "Only what my fleet can haul" means jobs an idle truck at the origin is
+        // CAPABLE of taking — the truck fits the cargo and, if it's a tractor, the
+        // company OWNS a matching trailer. We deliberately do NOT require the
+        // trailer to be free this very second: with every trailer out on the road
+        // that would blank the board even though the fleet plainly can do the work
+        // once a trailer returns. Whether a job can launch *right now* is shown by
+        // the row's GO button (and the "no trailer free" banner) on the client.
         if ($wantHaulable) {
-            // Trailers a tractor could actually attach right now (idle & healthy).
-            $availableTrailers = Trailer::where('company_id', $company->id)
-                ->where('status', Trailer::STATUS_IDLE)
+            // Every trailer the company owns and could realistically use (a totally
+            // scrapped one doesn't count as capability). Busy ones stay in — they
+            // free up — so the job lists as "Dispatch" rather than vanishing.
+            $ownedTrailers = Trailer::where('company_id', $company->id)
                 ->where('condition', '>', 10)
                 ->with('model')->get();
 
-            $contracts = $contracts->filter(fn (Contract $c) => $this->haulableBy($c, $idleFleet, $availableTrailers));
+            $contracts = $contracts->filter(fn (Contract $c) => $this->haulableBy($c, $idleFleet, $ownedTrailers));
         }
 
         // Flag jobs starting where a truck is (idle) or is heading (arriving).
@@ -218,8 +223,9 @@ class ContractController extends Controller
             }
 
             // A tractor that needs a trailer can only haul this if the company
-            // actually has a matching, available trailer whose capacity fits —
-            // otherwise the job can't be dispatched and shouldn't be listed.
+            // OWNS a matching trailer whose capacity fits (passed in here). A
+            // job needing a trailer type the fleet doesn't have stays hidden;
+            // one whose trailer is merely busy still shows (it frees up).
             if ($v->model->needs_trailer) {
                 return $trailers->contains(fn (Trailer $t) => $t->model
                     && $t->model->canCarry($commodity)

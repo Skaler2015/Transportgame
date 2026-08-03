@@ -352,9 +352,21 @@ function toggleContract(id: number) {
 // Pick the strongest sensible rig for a contract: the tightest-fitting truck
 // with the most fuel/best condition, the smallest trailer that carries it,
 // and the most skilled available driver — so one tap on GO dispatches it.
-// A vehicle we could actually dispatch this job with right now: either it
-// self-hauls, or it needs a trailer AND a compatible trailer is available.
+// Does this truck already hold enough fuel to make the trip? The backend
+// refuses dispatch when tank < distance × economy (driver/engine only shrink
+// the burn, so the base economy is a safe lower bound). A combustion truck too
+// low on fuel can't one-tap GO — it must be refuelled first.
+function hasFuelFor(v: Vehicle, c: Contract): boolean {
+  const econ = v.model?.fuel_economy ?? 0
+  if (econ <= 0) return true // electric/hydrogen/no-burn models never block
+  const need = (c.distance_km ?? 0) * econ
+  return (v.fuel ?? 0) + 0.001 >= need
+}
+// A vehicle we could actually dispatch this job with right now: it can carry the
+// load, has enough fuel to reach the destination, and — if it needs a trailer —
+// a compatible trailer is available.
 function dispatchableNow(v: Vehicle, c: Contract): boolean {
+  if (!hasFuelFor(v, c)) return false
   return !v.model?.needs_trailer || compatibleTrailers(c).length > 0
 }
 function bestVehicle(c: Contract): Vehicle | undefined {
