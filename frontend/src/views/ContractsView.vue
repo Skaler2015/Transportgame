@@ -436,6 +436,10 @@ const sortedContracts = computed(() => {
 const visibleContracts = computed(() =>
   goOnly.value ? sortedContracts.value.filter((c) => readyToGo(c)) : sortedContracts.value,
 )
+// How many jobs on the board have a one-tap GO, and how many I could actually
+// dispatch right now (capped by free drivers and idle trucks).
+const goReadyCount = computed(() => sortedContracts.value.filter((c) => readyToGo(c)).length)
+const canGoNow = computed(() => Math.min(goReadyCount.value, driverSummary.value.free, fleetStatus.value.idle))
 
 // ---- compatibility (mirrors Operations) -----------------------------------
 function modeOk(v: Vehicle, c: Contract): boolean {
@@ -826,6 +830,22 @@ onUnmounted(() => clearInterval(poll))
           <div v-if="topCommodity" class="flex items-center justify-between col-span-2"><span class="text-slate-400">Top cargo</span><span class="font-mono text-slate-200">{{ topCommodity.name }} ×{{ topCommodity.count }}</span></div>
         </div>
       </details>
+    </div>
+
+    <!-- At-a-glance board counts, right above the contracts. -->
+    <div v-if="!loading && contracts.length" class="glass !p-2.5 grid grid-cols-3 divide-x divide-white/10 text-center">
+      <div>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500">On board</p>
+        <p class="font-bold text-sm">{{ contracts.length }}</p>
+      </div>
+      <div>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500">⚡ GO-ready</p>
+        <p class="font-bold text-sm text-brand-soft">{{ goReadyCount }}</p>
+      </div>
+      <div>
+        <p class="text-[10px] uppercase tracking-wider text-slate-500">Can GO now</p>
+        <p class="font-bold text-sm text-gain">{{ canGoNow }}</p>
+      </div>
     </div>
 
     <div v-if="loading" class="grid place-items-center h-64 text-slate-500">Loading market…</div>
