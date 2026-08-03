@@ -1,0 +1,242 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\City;
+use App\Models\Commodity;
+use Illuminate\Database\Seeder;
+
+/**
+ * Real-world cities grouped by country. A player's world is scoped to their
+ * country, so each country ships a self-contained road network with producers
+ * and consumers. Coordinates are real; the economy roles are game design.
+ *
+ * Idempotent: keyed on (name, country) so re-running only updates.
+ */
+class CitySeeder extends Seeder
+{
+    public function run(): void
+    {
+        $commodityIds = Commodity::pluck('id', 'key');
+        if ($commodityIds->isEmpty()) {
+            (new CommoditySeeder)->run();
+            $commodityIds = Commodity::pluck('id', 'key');
+        }
+
+        foreach ($this->world() as $iso => $country) {
+            foreach ($country['cities'] as $c) {
+                // name, region, lat, lng, pop, fuel, tax, port, air, rail, unlock, produces[], consumes[]
+                [$name, $region, $lat, $lng, $pop, $fuel, $tax, $port, $air, $rail, $unlock, $produces, $consumes] = $c;
+
+                $city = City::updateOrCreate(
+                    ['name' => $name, 'country' => $iso],
+                    [
+                        'region' => $region,
+                        'country_name' => $country['name'],
+                        'country_code' => $iso,
+                        'lat' => $lat,
+                        'lng' => $lng,
+                        'population' => $pop,
+                        'economic_growth' => 1.0,
+                        'traffic' => random_int(20, 65),
+                        'tax_rate' => $tax,
+                        'fuel_price' => $fuel,
+                        'weather' => 'clear',
+                        'unlock_level' => $unlock,
+                        'has_port' => $port,
+                        'has_airport' => $air,
+                        'has_rail' => $rail,
+                    ]
+                );
+
+                $this->attachCommodities($city, $commodityIds, $produces, $consumes, $pop);
+            }
+        }
+    }
+
+    private function attachCommodities(City $city, $ids, array $produces, array $consumes, int $pop): void
+    {
+        $sync = [];
+        $scale = max(1, (int) ($pop / 2_000_000));
+
+        foreach ($produces as $key) {
+            if (! isset($ids[$key])) {
+                continue;
+            }
+            $sync[$ids[$key]] = [
+                'production' => random_int(60, 140) * $scale,
+                'consumption' => random_int(10, 30) * $scale,
+                'stock' => random_int(4000, 12000),
+                'stock_cap' => 40000,
+            ];
+        }
+        foreach ($consumes as $key) {
+            if (! isset($ids[$key]) || isset($sync[$ids[$key]])) {
+                continue;
+            }
+            $sync[$ids[$key]] = [
+                'production' => 0,
+                'consumption' => random_int(50, 120) * $scale,
+                'stock' => random_int(200, 1500),
+                'stock_cap' => 30000,
+            ];
+        }
+
+        $city->commodities()->sync($sync);
+    }
+
+    /** @return array<string,array{name:string,cities:array}> */
+    private function world(): array
+    {
+        return [
+            'IN' => ['name' => 'India', 'cities' => [
+                ['Delhi', 'Delhi', 28.6139, 77.2090, 32000000, 1.10, 0.09, false, true, true, 1, ['electronics', 'medicine', 'textiles'], ['grain', 'fuel', 'automobiles']],
+                ['Mumbai', 'Maharashtra', 19.0760, 72.8777, 20700000, 1.16, 0.11, true, true, true, 1, ['automobiles', 'luxury_goods', 'fuel'], ['steel_coil', 'textiles', 'frozen_goods']],
+                ['Bengaluru', 'Karnataka', 12.9716, 77.5946, 13000000, 1.08, 0.08, false, true, true, 1, ['electronics', 'machinery', 'solar_panels'], ['grain', 'coffee', 'medicine']],
+                ['Jaipur', 'Rajasthan', 26.9124, 75.7873, 4000000, 1.04, 0.07, false, true, true, 1, ['textiles', 'furniture'], ['electronics', 'fuel', 'medicine']],
+                ['Chennai', 'Tamil Nadu', 13.0827, 80.2707, 11000000, 1.14, 0.10, true, true, true, 2, ['automobiles', 'electronics'], ['crude_oil', 'steel_coil', 'grain']],
+                ['Kolkata', 'West Bengal', 22.5726, 88.3639, 15000000, 1.12, 0.10, true, false, true, 2, ['steel_coil', 'textiles', 'timber'], ['electronics', 'medicine', 'fuel']],
+                ['Hyderabad', 'Telangana', 17.3850, 78.4867, 10000000, 1.06, 0.08, false, true, true, 2, ['medicine', 'electronics'], ['grain', 'fuel', 'coffee']],
+                ['Pune', 'Maharashtra', 18.5204, 73.8567, 7000000, 1.08, 0.08, false, false, true, 3, ['automobiles', 'machinery'], ['grain', 'electronics', 'coffee']],
+                ['Ahmedabad', 'Gujarat', 23.0225, 72.5714, 8000000, 1.02, 0.07, false, true, true, 3, ['textiles', 'chemicals'], ['grain', 'machinery', 'fuel']],
+                ['Surat', 'Gujarat', 21.1702, 72.8311, 7000000, 1.02, 0.07, false, false, true, 4, ['textiles', 'luxury_goods'], ['grain', 'machinery', 'fuel']],
+                ['Kanpur', 'Uttar Pradesh', 26.4499, 80.3319, 3000000, 1.00, 0.06, false, false, true, 4, ['textiles', 'timber', 'chemicals'], ['electronics', 'medicine']],
+                ['Nagpur', 'Maharashtra', 21.1458, 79.0882, 3000000, 1.04, 0.07, false, true, true, 5, ['steel_coil', 'timber'], ['grain', 'electronics']],
+                ['Kochi', 'Kerala', 9.9312, 76.2673, 3000000, 1.16, 0.09, true, true, false, 5, ['crude_oil', 'fuel', 'coffee'], ['steel_coil', 'electronics', 'grain']],
+                ['Visakhapatnam', 'Andhra Pradesh', 17.6868, 83.2185, 2300000, 1.10, 0.08, true, false, true, 6, ['steel_coil', 'crude_oil'], ['grain', 'machinery', 'electronics']],
+                ['Indore', 'Madhya Pradesh', 22.7196, 75.8577, 3000000, 1.02, 0.06, false, true, true, 6, ['grain', 'textiles'], ['machinery', 'fuel', 'medicine']],
+                ['Lucknow', 'Uttar Pradesh', 26.8467, 80.9462, 4000000, 1.04, 0.07, false, true, true, 7, ['grain', 'furniture'], ['electronics', 'fuel', 'medicine']],
+                // State & UT capitals — every Indian region on the network, so
+                // there's always fresh work leaving and arriving anywhere.
+                ['Patna', 'Bihar', 25.5941, 85.1376, 2500000, 1.02, 0.06, false, true, true, 2, ['grain', 'textiles'], ['electronics', 'fuel', 'medicine']],
+                ['Chandigarh', 'Chandigarh', 30.7333, 76.7794, 1200000, 1.06, 0.08, false, true, true, 2, ['electronics', 'machinery'], ['grain', 'fuel', 'automobiles']],
+                ['Bhopal', 'Madhya Pradesh', 23.2599, 77.4126, 2400000, 1.02, 0.06, false, true, true, 3, ['machinery', 'electronics'], ['grain', 'fuel', 'coffee']],
+                ['Gandhinagar', 'Gujarat', 23.2156, 72.6369, 400000, 1.02, 0.07, false, true, true, 3, ['chemicals', 'solar_panels'], ['grain', 'machinery', 'fuel']],
+                ['Dehradun', 'Uttarakhand', 30.3165, 78.0322, 800000, 1.06, 0.07, false, true, true, 3, ['medicine', 'furniture'], ['electronics', 'fuel', 'grain']],
+                ['Bhubaneswar', 'Odisha', 20.2961, 85.8245, 1200000, 1.08, 0.08, false, true, true, 4, ['steel_coil', 'machinery'], ['grain', 'electronics', 'fuel']],
+                ['Thiruvananthapuram', 'Kerala', 8.5241, 76.9366, 1700000, 1.16, 0.09, true, true, true, 4, ['coffee', 'fuel'], ['electronics', 'grain', 'machinery']],
+                ['Vijayawada', 'Andhra Pradesh', 16.5062, 80.6480, 1500000, 1.08, 0.08, false, true, true, 4, ['grain', 'cement'], ['electronics', 'fuel', 'machinery']],
+                ['Panaji', 'Goa', 15.4909, 73.8278, 120000, 1.14, 0.09, true, true, true, 4, ['luxury_goods', 'fuel'], ['grain', 'electronics', 'frozen_goods']],
+                ['Jammu', 'Jammu & Kashmir', 32.7266, 74.8570, 650000, 1.10, 0.07, false, true, true, 4, ['textiles', 'medicine'], ['electronics', 'fuel', 'grain']],
+                ['Raipur', 'Chhattisgarh', 21.2514, 81.6296, 1100000, 1.04, 0.06, false, true, true, 5, ['steel_coil', 'cement'], ['grain', 'electronics', 'fuel']],
+                ['Guwahati', 'Assam', 26.1445, 91.7362, 1100000, 1.10, 0.07, false, true, true, 5, ['timber', 'coffee'], ['electronics', 'fuel', 'medicine']],
+                ['Ranchi', 'Jharkhand', 23.3441, 85.3096, 1500000, 1.04, 0.06, false, true, true, 5, ['steel_coil', 'machinery'], ['grain', 'electronics', 'medicine']],
+                ['Srinagar', 'Jammu & Kashmir', 34.0837, 74.7973, 1200000, 1.12, 0.07, false, true, true, 5, ['textiles', 'furniture'], ['electronics', 'fuel', 'grain']],
+                ['Shimla', 'Himachal Pradesh', 31.1048, 77.1734, 200000, 1.10, 0.07, false, true, true, 6, ['timber', 'furniture'], ['grain', 'fuel', 'electronics']],
+                ['Gangtok', 'Sikkim', 27.3389, 88.6065, 100000, 1.14, 0.07, false, true, false, 7, ['coffee', 'medicine'], ['electronics', 'fuel', 'grain']],
+                ['Agartala', 'Tripura', 23.8315, 91.2868, 500000, 1.10, 0.07, false, true, true, 7, ['timber', 'textiles'], ['electronics', 'fuel', 'grain']],
+                ['Imphal', 'Manipur', 24.8170, 93.9368, 550000, 1.12, 0.07, false, true, false, 7, ['textiles', 'timber'], ['electronics', 'fuel', 'grain']],
+                ['Shillong', 'Meghalaya', 25.5788, 91.8933, 350000, 1.12, 0.07, false, true, false, 7, ['timber', 'coffee'], ['electronics', 'fuel', 'grain']],
+                ['Puducherry', 'Puducherry', 11.9416, 79.8083, 660000, 1.12, 0.07, true, true, true, 5, ['textiles', 'automobiles'], ['grain', 'fuel', 'electronics']],
+                ['Itanagar', 'Arunachal Pradesh', 27.0844, 93.6053, 100000, 1.14, 0.07, false, true, false, 8, ['timber', 'coffee'], ['electronics', 'fuel', 'grain']],
+                ['Aizawl', 'Mizoram', 23.7271, 92.7176, 300000, 1.14, 0.07, false, true, false, 8, ['timber', 'coffee'], ['electronics', 'fuel', 'grain']],
+                ['Kohima', 'Nagaland', 25.6701, 94.1077, 130000, 1.14, 0.07, false, false, false, 8, ['timber', 'furniture'], ['electronics', 'fuel', 'grain']],
+                ['Leh', 'Ladakh', 34.1526, 77.5771, 45000, 1.18, 0.06, false, true, false, 9, ['solar_panels', 'luxury_goods'], ['electronics', 'fuel', 'grain']],
+                ['Port Blair', 'Andaman & Nicobar', 11.6234, 92.7265, 110000, 1.18, 0.06, true, true, false, 9, ['timber', 'fuel'], ['grain', 'electronics', 'machinery']],
+                // Major tier-2/3 cities across India — a dense national network
+                // so contracts are always plentiful in every direction.
+                ['Agra', 'Uttar Pradesh', 27.1767, 78.0081, 1600000, 1.02, 0.07, false, true, true, 3, ['textiles', 'luxury_goods'], ['electronics', 'fuel', 'grain']],
+                ['Varanasi', 'Uttar Pradesh', 25.3176, 82.9739, 1200000, 1.02, 0.07, false, true, true, 4, ['textiles', 'furniture'], ['electronics', 'fuel', 'medicine']],
+                ['Prayagraj', 'Uttar Pradesh', 25.4358, 81.8463, 1100000, 1.02, 0.07, false, true, true, 5, ['grain', 'chemicals'], ['electronics', 'fuel', 'medicine']],
+                ['Meerut', 'Uttar Pradesh', 28.9845, 77.7064, 1400000, 1.02, 0.07, false, false, true, 4, ['machinery', 'textiles'], ['electronics', 'fuel', 'grain']],
+                ['Ghaziabad', 'Uttar Pradesh', 28.6692, 77.4538, 1700000, 1.04, 0.08, false, false, true, 3, ['machinery', 'electronics'], ['grain', 'fuel', 'automobiles']],
+                ['Noida', 'Uttar Pradesh', 28.5355, 77.3910, 640000, 1.06, 0.08, false, false, true, 2, ['electronics', 'machinery'], ['grain', 'fuel', 'coffee']],
+                ['Bareilly', 'Uttar Pradesh', 28.3670, 79.4304, 900000, 1.02, 0.06, false, true, true, 6, ['furniture', 'grain'], ['electronics', 'fuel', 'medicine']],
+                ['Aligarh', 'Uttar Pradesh', 27.8974, 78.0880, 900000, 1.00, 0.06, false, false, true, 6, ['machinery', 'steel_coil'], ['electronics', 'fuel', 'grain']],
+                ['Moradabad', 'Uttar Pradesh', 28.8386, 78.7733, 900000, 1.00, 0.06, false, false, true, 7, ['machinery', 'luxury_goods'], ['electronics', 'fuel', 'grain']],
+                ['Gorakhpur', 'Uttar Pradesh', 26.7606, 83.3732, 700000, 1.02, 0.06, false, true, true, 7, ['grain', 'textiles'], ['electronics', 'fuel', 'medicine']],
+                ['Jhansi', 'Uttar Pradesh', 25.4484, 78.5685, 550000, 1.02, 0.06, false, false, true, 8, ['grain', 'steel_coil'], ['electronics', 'fuel', 'machinery']],
+                ['Gurugram', 'Haryana', 28.4595, 77.0266, 1150000, 1.06, 0.08, false, true, true, 2, ['automobiles', 'electronics'], ['grain', 'fuel', 'coffee']],
+                ['Faridabad', 'Haryana', 28.4089, 77.3178, 1400000, 1.04, 0.08, false, false, true, 3, ['automobiles', 'machinery'], ['grain', 'electronics', 'fuel']],
+                ['Rohtak', 'Haryana', 28.8955, 76.6066, 400000, 1.02, 0.06, false, false, true, 7, ['grain', 'textiles'], ['electronics', 'fuel', 'medicine']],
+                ['Panipat', 'Haryana', 29.3909, 76.9635, 450000, 1.02, 0.06, false, false, true, 6, ['textiles', 'chemicals'], ['electronics', 'fuel', 'grain']],
+                ['Ambala', 'Haryana', 30.3782, 76.7767, 200000, 1.04, 0.06, false, true, true, 8, ['machinery', 'grain'], ['electronics', 'fuel', 'medicine']],
+                ['Hisar', 'Haryana', 29.1492, 75.7217, 300000, 1.02, 0.06, false, true, true, 8, ['grain', 'steel_coil'], ['electronics', 'fuel', 'machinery']],
+                ['Amritsar', 'Punjab', 31.6340, 74.8723, 1200000, 1.06, 0.08, false, true, true, 5, ['grain', 'textiles'], ['electronics', 'fuel', 'medicine']],
+                ['Ludhiana', 'Punjab', 30.9010, 75.8573, 1700000, 1.04, 0.07, false, true, true, 4, ['textiles', 'machinery'], ['electronics', 'fuel', 'grain']],
+                ['Jalandhar', 'Punjab', 31.3260, 75.5762, 900000, 1.04, 0.07, false, false, true, 6, ['machinery', 'furniture'], ['electronics', 'fuel', 'grain']],
+                ['Jodhpur', 'Rajasthan', 26.2389, 73.0243, 1100000, 1.04, 0.07, false, true, true, 5, ['textiles', 'furniture'], ['electronics', 'fuel', 'grain']],
+                ['Udaipur', 'Rajasthan', 24.5854, 73.7125, 500000, 1.06, 0.07, false, true, true, 6, ['luxury_goods', 'textiles'], ['electronics', 'fuel', 'grain']],
+                ['Kota', 'Rajasthan', 25.2138, 75.8648, 1000000, 1.04, 0.06, false, false, true, 6, ['chemicals', 'machinery'], ['electronics', 'fuel', 'grain']],
+                ['Ajmer', 'Rajasthan', 26.4499, 74.6399, 550000, 1.04, 0.06, false, false, true, 8, ['textiles', 'grain'], ['electronics', 'fuel', 'medicine']],
+                ['Bikaner', 'Rajasthan', 28.0229, 73.3119, 650000, 1.04, 0.06, false, true, true, 8, ['grain', 'solar_panels'], ['electronics', 'fuel', 'medicine']],
+                ['Gwalior', 'Madhya Pradesh', 26.2183, 78.1828, 1100000, 1.02, 0.06, false, true, true, 6, ['machinery', 'textiles'], ['electronics', 'fuel', 'grain']],
+                ['Jabalpur', 'Madhya Pradesh', 23.1815, 79.9864, 1200000, 1.02, 0.06, false, true, true, 6, ['machinery', 'timber'], ['electronics', 'fuel', 'grain']],
+                ['Ujjain', 'Madhya Pradesh', 23.1765, 75.7885, 520000, 1.02, 0.06, false, false, true, 8, ['grain', 'textiles'], ['electronics', 'fuel', 'medicine']],
+                ['Vadodara', 'Gujarat', 22.3072, 73.1812, 2100000, 1.02, 0.07, false, true, true, 4, ['chemicals', 'machinery'], ['grain', 'electronics', 'fuel']],
+                ['Rajkot', 'Gujarat', 22.3039, 70.8022, 1400000, 1.02, 0.07, false, true, true, 5, ['machinery', 'automobiles'], ['grain', 'electronics', 'fuel']],
+                ['Bhavnagar', 'Gujarat', 21.7645, 72.1519, 650000, 1.04, 0.07, true, false, true, 7, ['steel_coil', 'chemicals'], ['grain', 'electronics', 'fuel']],
+                ['Jamnagar', 'Gujarat', 22.4707, 70.0577, 700000, 1.00, 0.06, true, true, true, 6, ['crude_oil', 'fuel', 'chemicals'], ['grain', 'electronics', 'machinery']],
+                ['Nashik', 'Maharashtra', 19.9975, 73.7898, 1500000, 1.06, 0.08, false, true, true, 5, ['machinery', 'luxury_goods'], ['grain', 'electronics', 'fuel']],
+                ['Aurangabad', 'Maharashtra', 19.8762, 75.3433, 1200000, 1.06, 0.08, false, true, true, 5, ['automobiles', 'machinery'], ['grain', 'electronics', 'fuel']],
+                ['Solapur', 'Maharashtra', 17.6599, 75.9064, 950000, 1.06, 0.07, false, false, true, 8, ['textiles', 'grain'], ['electronics', 'fuel', 'medicine']],
+                ['Kolhapur', 'Maharashtra', 16.7050, 74.2433, 700000, 1.06, 0.07, false, true, true, 8, ['textiles', 'machinery'], ['electronics', 'fuel', 'grain']],
+                ['Thane', 'Maharashtra', 19.2183, 72.9781, 1900000, 1.10, 0.09, false, false, true, 3, ['electronics', 'chemicals'], ['grain', 'fuel', 'frozen_goods']],
+                ['Navi Mumbai', 'Maharashtra', 19.0330, 73.0297, 1100000, 1.12, 0.09, true, false, true, 3, ['electronics', 'machinery'], ['grain', 'fuel', 'steel_coil']],
+                ['Mysuru', 'Karnataka', 12.2958, 76.6394, 900000, 1.06, 0.07, false, true, true, 5, ['luxury_goods', 'coffee'], ['electronics', 'fuel', 'grain']],
+                ['Mangaluru', 'Karnataka', 12.9141, 74.8560, 620000, 1.10, 0.08, true, true, true, 6, ['crude_oil', 'coffee', 'fuel'], ['grain', 'electronics', 'machinery']],
+                ['Hubballi', 'Karnataka', 15.3647, 75.1240, 950000, 1.06, 0.07, false, true, true, 7, ['machinery', 'steel_coil'], ['grain', 'electronics', 'fuel']],
+                ['Belagavi', 'Karnataka', 15.8497, 74.4977, 500000, 1.06, 0.07, false, true, true, 8, ['machinery', 'grain'], ['electronics', 'fuel', 'medicine']],
+                ['Coimbatore', 'Tamil Nadu', 11.0168, 76.9558, 1600000, 1.12, 0.09, false, true, true, 4, ['textiles', 'machinery'], ['grain', 'electronics', 'fuel']],
+                ['Madurai', 'Tamil Nadu', 9.9252, 78.1198, 1500000, 1.12, 0.09, false, true, true, 5, ['textiles', 'grain'], ['electronics', 'fuel', 'medicine']],
+                ['Tiruchirappalli', 'Tamil Nadu', 10.7905, 78.7047, 950000, 1.12, 0.08, false, true, true, 6, ['machinery', 'steel_coil'], ['grain', 'electronics', 'fuel']],
+                ['Salem', 'Tamil Nadu', 11.6643, 78.1460, 900000, 1.12, 0.08, false, true, true, 7, ['steel_coil', 'textiles'], ['grain', 'electronics', 'fuel']],
+                ['Tirunelveli', 'Tamil Nadu', 8.7139, 77.7567, 500000, 1.12, 0.08, false, false, true, 8, ['textiles', 'grain'], ['electronics', 'fuel', 'medicine']],
+                ['Vellore', 'Tamil Nadu', 12.9165, 79.1325, 500000, 1.12, 0.08, false, false, true, 8, ['machinery', 'medicine'], ['grain', 'electronics', 'fuel']],
+                ['Warangal', 'Telangana', 17.9689, 79.5941, 830000, 1.06, 0.07, false, false, true, 7, ['textiles', 'grain'], ['electronics', 'fuel', 'medicine']],
+                ['Guntur', 'Andhra Pradesh', 16.3067, 80.4365, 750000, 1.08, 0.07, false, false, true, 7, ['grain', 'textiles'], ['electronics', 'fuel', 'machinery']],
+                ['Nellore', 'Andhra Pradesh', 14.4426, 79.9865, 560000, 1.08, 0.07, true, false, true, 8, ['grain', 'chemicals'], ['electronics', 'fuel', 'machinery']],
+                ['Tirupati', 'Andhra Pradesh', 13.6288, 79.4192, 470000, 1.08, 0.07, false, true, true, 8, ['electronics', 'luxury_goods'], ['grain', 'fuel', 'medicine']],
+                ['Kurnool', 'Andhra Pradesh', 15.8281, 78.0373, 480000, 1.08, 0.07, false, true, true, 9, ['grain', 'cement'], ['electronics', 'fuel', 'machinery']],
+                ['Kozhikode', 'Kerala', 11.2588, 75.7804, 610000, 1.16, 0.09, true, true, true, 6, ['coffee', 'timber'], ['electronics', 'grain', 'machinery']],
+                ['Thrissur', 'Kerala', 10.5276, 76.2144, 320000, 1.16, 0.09, false, false, true, 8, ['luxury_goods', 'coffee'], ['electronics', 'grain', 'fuel']],
+                ['Kollam', 'Kerala', 8.8932, 76.6141, 400000, 1.16, 0.09, true, false, true, 8, ['coffee', 'fuel'], ['electronics', 'grain', 'machinery']],
+                ['Kannur', 'Kerala', 11.8745, 75.3704, 500000, 1.16, 0.09, true, true, true, 8, ['coffee', 'timber'], ['electronics', 'grain', 'fuel']],
+                ['Jamshedpur', 'Jharkhand', 22.8046, 86.2029, 1400000, 1.04, 0.06, false, true, true, 5, ['steel_coil', 'automobiles', 'machinery'], ['grain', 'electronics', 'fuel']],
+                ['Dhanbad', 'Jharkhand', 23.7957, 86.4304, 1200000, 1.02, 0.06, false, false, true, 6, ['steel_coil', 'chemicals'], ['grain', 'electronics', 'fuel']],
+                ['Bokaro', 'Jharkhand', 23.6693, 86.1511, 560000, 1.02, 0.06, false, false, true, 8, ['steel_coil', 'machinery'], ['grain', 'electronics', 'fuel']],
+                ['Siliguri', 'West Bengal', 26.7271, 88.3953, 700000, 1.10, 0.08, false, true, true, 7, ['coffee', 'timber'], ['electronics', 'fuel', 'grain']],
+                ['Durgapur', 'West Bengal', 23.5204, 87.3119, 580000, 1.10, 0.08, false, true, true, 7, ['steel_coil', 'machinery'], ['grain', 'electronics', 'fuel']],
+                ['Asansol', 'West Bengal', 23.6739, 86.9524, 1200000, 1.10, 0.08, false, false, true, 7, ['steel_coil', 'chemicals'], ['grain', 'electronics', 'fuel']],
+                ['Howrah', 'West Bengal', 22.5958, 88.2636, 1100000, 1.12, 0.09, true, false, true, 4, ['machinery', 'steel_coil'], ['grain', 'electronics', 'fuel']],
+                ['Cuttack', 'Odisha', 20.4625, 85.8830, 650000, 1.08, 0.07, false, false, true, 7, ['steel_coil', 'textiles'], ['grain', 'electronics', 'fuel']],
+                ['Rourkela', 'Odisha', 22.2604, 84.8536, 550000, 1.06, 0.06, false, true, true, 8, ['steel_coil', 'machinery'], ['grain', 'electronics', 'fuel']],
+                ['Gaya', 'Bihar', 24.7955, 85.0002, 470000, 1.02, 0.06, false, true, true, 8, ['grain', 'furniture'], ['electronics', 'fuel', 'medicine']],
+                ['Muzaffarpur', 'Bihar', 26.1209, 85.3647, 400000, 1.02, 0.06, false, false, true, 9, ['grain', 'textiles'], ['electronics', 'fuel', 'medicine']],
+                ['Bhagalpur', 'Bihar', 25.2425, 86.9842, 410000, 1.02, 0.06, false, false, true, 9, ['textiles', 'grain'], ['electronics', 'fuel', 'medicine']],
+                ['Dibrugarh', 'Assam', 27.4728, 94.9120, 250000, 1.12, 0.07, false, true, true, 9, ['coffee', 'crude_oil', 'fuel'], ['electronics', 'grain', 'machinery']],
+                ['Silchar', 'Assam', 24.8333, 92.7789, 230000, 1.12, 0.07, false, true, true, 9, ['timber', 'coffee'], ['electronics', 'fuel', 'grain']],
+            ]],
+            'US' => ['name' => 'United States', 'cities' => [
+                ['New York', 'New York', 40.7128, -74.0060, 8300000, 0.95, 0.09, true, true, true, 1, ['electronics', 'luxury_goods', 'medicine'], ['grain', 'fuel', 'automobiles']],
+                ['Los Angeles', 'California', 34.0522, -118.2437, 3900000, 1.05, 0.10, true, true, true, 1, ['automobiles', 'electronics', 'solar_panels'], ['steel_coil', 'grain', 'fuel']],
+                ['Chicago', 'Illinois', 41.8781, -87.6298, 2700000, 0.92, 0.08, false, true, true, 1, ['machinery', 'steel_coil'], ['grain', 'electronics', 'coffee']],
+                ['Houston', 'Texas', 29.7604, -95.3698, 2300000, 0.78, 0.06, true, true, true, 2, ['crude_oil', 'fuel', 'chemicals'], ['steel_coil', 'grain', 'electronics']],
+                ['Dallas', 'Texas', 32.7767, -96.7970, 1300000, 0.80, 0.06, false, true, true, 2, ['electronics', 'machinery'], ['grain', 'fuel', 'automobiles']],
+                ['Atlanta', 'Georgia', 33.7490, -84.3880, 500000, 0.88, 0.07, false, true, true, 3, ['automobiles', 'textiles'], ['electronics', 'medicine', 'coffee']],
+                ['Seattle', 'Washington', 47.6062, -122.3321, 750000, 1.02, 0.09, true, true, true, 3, ['machinery', 'electronics', 'coffee'], ['grain', 'fuel', 'frozen_goods']],
+                ['Miami', 'Florida', 25.7617, -80.1918, 470000, 0.94, 0.07, true, true, false, 4, ['luxury_goods', 'automobiles'], ['grain', 'fuel', 'steel_coil']],
+                ['Denver', 'Colorado', 39.7392, -104.9903, 715000, 0.90, 0.08, false, true, true, 5, ['machinery', 'grain'], ['electronics', 'fuel', 'medicine']],
+                ['Detroit', 'Michigan', 42.3314, -83.0458, 630000, 0.86, 0.07, false, true, true, 6, ['automobiles', 'steel_coil', 'machinery'], ['electronics', 'grain', 'fuel']],
+            ]],
+            'GB' => ['name' => 'United Kingdom', 'cities' => [
+                ['London', 'England', 51.5074, -0.1278, 9000000, 1.70, 0.12, true, true, true, 1, ['electronics', 'luxury_goods', 'medicine'], ['grain', 'fuel', 'automobiles']],
+                ['Birmingham', 'England', 52.4862, -1.8904, 1150000, 1.62, 0.11, false, true, true, 1, ['automobiles', 'machinery'], ['electronics', 'grain', 'coffee']],
+                ['Manchester', 'England', 53.4808, -2.2426, 550000, 1.60, 0.10, false, true, true, 1, ['textiles', 'machinery'], ['electronics', 'grain', 'fuel']],
+                ['Southampton', 'England', 50.9097, -1.4044, 250000, 1.66, 0.11, true, false, true, 2, ['automobiles', 'fuel', 'crude_oil'], ['steel_coil', 'grain', 'electronics']],
+                ['Leeds', 'England', 53.8008, -1.5491, 790000, 1.58, 0.10, false, false, true, 3, ['textiles', 'furniture'], ['electronics', 'fuel', 'medicine']],
+                ['Glasgow', 'Scotland', 55.8642, -4.2518, 630000, 1.64, 0.11, true, true, true, 4, ['steel_coil', 'machinery'], ['grain', 'electronics', 'coffee']],
+                ['Liverpool', 'England', 53.4084, -2.9916, 500000, 1.60, 0.10, true, false, true, 5, ['machinery', 'timber'], ['grain', 'fuel', 'frozen_goods']],
+                ['Bristol', 'England', 51.4545, -2.5879, 470000, 1.62, 0.10, true, true, true, 6, ['electronics', 'solar_panels'], ['grain', 'fuel', 'automobiles']],
+            ]],
+            'AE' => ['name' => 'United Arab Emirates', 'cities' => [
+                ['Dubai', 'Dubai', 25.2048, 55.2708, 3500000, 0.62, 0.03, true, true, true, 1, ['luxury_goods', 'electronics', 'fuel'], ['grain', 'automobiles', 'frozen_goods']],
+                ['Abu Dhabi', 'Abu Dhabi', 24.4539, 54.3773, 1500000, 0.58, 0.03, true, true, true, 1, ['crude_oil', 'fuel', 'chemicals'], ['grain', 'electronics', 'automobiles']],
+                ['Sharjah', 'Sharjah', 25.3463, 55.4209, 1800000, 0.60, 0.03, true, true, false, 2, ['machinery', 'textiles'], ['grain', 'electronics', 'fuel']],
+                ['Al Ain', 'Abu Dhabi', 24.1917, 55.7605, 770000, 0.60, 0.03, false, true, false, 3, ['grain', 'furniture'], ['electronics', 'fuel', 'medicine']],
+                ['Fujairah', 'Fujairah', 25.1288, 56.3265, 250000, 0.60, 0.03, true, false, false, 4, ['crude_oil', 'fuel'], ['grain', 'machinery', 'electronics']],
+                ['Ras Al Khaimah', 'Ras Al Khaimah', 25.7895, 55.9432, 350000, 0.60, 0.03, true, true, false, 5, ['cement', 'steel_coil'], ['grain', 'electronics', 'fuel']],
+            ]],
+        ];
+    }
+}

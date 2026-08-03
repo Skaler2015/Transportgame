@@ -1,0 +1,1 @@
+import{J as e,L as t,R as n}from"./index-BFs-oDvi.js";function r(r=1e3){let i=e(Date.now()),a;return t(()=>{a=window.setInterval(()=>i.value=Date.now(),r)}),n(()=>clearInterval(a)),i}function i(e,t,n){let r=new Date(e).getTime(),i=new Date(t).getTime();return i<=r?100:Math.max(0,Math.min(100,(n-r)/(i-r)*100))}export{r as n,i as t};
