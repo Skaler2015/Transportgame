@@ -5,7 +5,7 @@ import { api, apiError } from '../api/client'
 import { useGameStore } from '../stores/game'
 import { useToastStore } from '../stores/toast'
 import type { City, Shipment } from '../types'
-import { credits, WEATHER_ICON, cur } from '../utils/format'
+import { credits, WEATHER_ICON, weatherAdvisory, cur } from '../utils/format'
 
 const game = useGameStore()
 const toast = useToastStore()
@@ -119,8 +119,9 @@ function drawWeather() {
   for (const c of game.cities) {
     if (c.weather === 'clear' || !c.weather) continue
     const color = WEATHER_COLOR[c.weather] ?? '#94a3b8'
+    const fx = weatherAdvisory(c.weather)
     L.circleMarker([c.lat, c.lng], { radius: 16, color, weight: 1, fillColor: color, fillOpacity: 0.14, className: 'wx-halo' })
-      .bindTooltip(`${WEATHER_ICON[c.weather] || ''} ${c.weather} — ${c.name}`, { direction: 'top' })
+      .bindTooltip(`${WEATHER_ICON[c.weather] || ''} ${c.weather} — ${c.name}` + (fx ? `<br><span style="color:#fca5a5">${fx}</span>` : ''), { direction: 'top' })
       .addTo(g)
   }
 }
@@ -327,6 +328,9 @@ onUnmounted(() => {
           <div class="glass !p-1.5"><p class="stat-label">Road</p><p class="font-mono">{{ selectedCity.road_quality ?? '—' }}</p></div>
           <div class="glass !p-1.5"><p class="stat-label">Toll/km</p><p class="font-mono">{{ cur() }}{{ selectedCity.toll_per_km ?? '—' }}</p></div>
         </div>
+        <p v-if="weatherAdvisory(selectedCity.weather)" class="text-[11px] text-loss mt-2">
+          {{ WEATHER_ICON[selectedCity.weather] }} {{ weatherAdvisory(selectedCity.weather) }} on trips through here.
+        </p>
         <p class="stat-label mt-2 mb-1">Active routes here ({{ routesForCity.length }})</p>
         <div class="space-y-1 max-h-40 overflow-y-auto">
           <div v-for="s in routesForCity" :key="s.id" class="flex items-center justify-between">

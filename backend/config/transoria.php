@@ -86,6 +86,49 @@ return [
         ['name' => 'Monsoon', 'months' => [6, 7, 8, 9], 'demand' => ['food' => 1.15, 'industrial' => 0.90, 'raw' => 0.92]],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Weather v2 — conditions that bite
+    |--------------------------------------------------------------------------
+    | Each state carries multipliers a shipment actually feels along its lane:
+    | speed (ETA), fuel (burn), accident (incident odds), wear (extra vehicle
+    | condition/tyre loss) and spoilage (fraction of perishable cargo lost in
+    | that weather). `severity` groups them for the map colouring, `icon` for
+    | tooltips. Weather is generated with seasonal bias, regional coherence and
+    | persistence in EventService::driftCities.
+    */
+    'weather' => [
+        'clear'   => ['label' => 'Clear',    'icon' => '☀️', 'severity' => 'calm',    'speed' => 1.00, 'fuel' => 1.00, 'accident' => 1.0, 'wear' => 1.00, 'spoilage' => 0.00],
+        'wind'    => ['label' => 'Windy',    'icon' => '💨', 'severity' => 'calm',    'speed' => 0.97, 'fuel' => 1.06, 'accident' => 1.1, 'wear' => 1.02, 'spoilage' => 0.00],
+        'rain'    => ['label' => 'Rain',     'icon' => '🌧️', 'severity' => 'moderate','speed' => 0.90, 'fuel' => 1.05, 'accident' => 1.4, 'wear' => 1.05, 'spoilage' => 0.02],
+        'fog'     => ['label' => 'Fog',      'icon' => '🌫️', 'severity' => 'moderate','speed' => 0.85, 'fuel' => 1.02, 'accident' => 1.6, 'wear' => 1.00, 'spoilage' => 0.00],
+        'heat'    => ['label' => 'Heatwave', 'icon' => '🔥', 'severity' => 'moderate','speed' => 0.95, 'fuel' => 1.10, 'accident' => 1.1, 'wear' => 1.08, 'spoilage' => 0.10],
+        'snow'    => ['label' => 'Snow',     'icon' => '❄️', 'severity' => 'severe',  'speed' => 0.75, 'fuel' => 1.15, 'accident' => 1.9, 'wear' => 1.12, 'spoilage' => 0.03],
+        'storm'   => ['label' => 'Storm',    'icon' => '⛈️', 'severity' => 'severe',  'speed' => 0.70, 'fuel' => 1.18, 'accident' => 2.2, 'wear' => 1.15, 'spoilage' => 0.06],
+        'flood'   => ['label' => 'Flood',    'icon' => '🌊', 'severity' => 'extreme', 'speed' => 0.60, 'fuel' => 1.20, 'accident' => 2.4, 'wear' => 1.20, 'spoilage' => 0.08],
+        'cyclone' => ['label' => 'Cyclone',  'icon' => '🌀', 'severity' => 'extreme', 'speed' => 0.50, 'fuel' => 1.28, 'accident' => 3.0, 'wear' => 1.25, 'spoilage' => 0.12],
+    ],
+
+    // How weather is generated each tick. `persistence` = chance a city keeps
+    // its current weather; otherwise it re-rolls from the season's weighted bag,
+    // biased toward the region's prevailing weather for that day.
+    'weather_gen' => [
+        'persistence' => 0.68,
+        'regional_pull' => 0.6,   // when re-rolling, chance to match the region
+        // Weighted weather bags by calendar month (1–12).
+        'season_bags' => [
+            'monsoon' => ['clear' => 2, 'rain' => 5, 'storm' => 3, 'flood' => 2, 'wind' => 2, 'fog' => 1],
+            'winter'  => ['clear' => 4, 'fog' => 3, 'snow' => 2, 'rain' => 1, 'wind' => 1],
+            'summer'  => ['clear' => 4, 'heat' => 4, 'wind' => 2, 'storm' => 1],
+            'default' => ['clear' => 5, 'rain' => 2, 'wind' => 2, 'fog' => 1, 'heat' => 1],
+        ],
+        // month → bag key
+        'month_season' => [1 => 'winter', 2 => 'winter', 3 => 'summer', 4 => 'summer', 5 => 'summer',
+            6 => 'monsoon', 7 => 'monsoon', 8 => 'monsoon', 9 => 'monsoon', 10 => 'default', 11 => 'default', 12 => 'winter'],
+        // Active event types that force harsher weather over their scope.
+        'event_weather' => ['storm' => 'storm', 'cyclone' => 'cyclone', 'flood' => 'flood'],
+    ],
+
     // Contract market generation.
     'contracts' => [
         'target_open_per_hub' => 12,  // keep roughly this many open per producing city

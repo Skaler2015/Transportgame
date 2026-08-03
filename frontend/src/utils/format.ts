@@ -50,7 +50,34 @@ export function untilString(iso: string): string {
 }
 
 export const WEATHER_ICON: Record<string, string> = {
-  clear: '☀️', rain: '🌧️', snow: '❄️', storm: '⛈️', fog: '🌫️', heat: '🔥', flood: '🌊',
+  clear: '☀️', wind: '💨', rain: '🌧️', snow: '❄️', storm: '⛈️', fog: '🌫️', heat: '🔥', flood: '🌊', cyclone: '🌀',
+}
+
+// Weather v2 effects (mirrors config/transoria.php 'weather') for UI advisories.
+// speed/fuel/accident are multipliers; spoilage is the perishable-loss fraction.
+export interface WeatherFx { label: string; severity: string; speed: number; fuel: number; accident: number; spoilage: number }
+export const WEATHER_FX: Record<string, WeatherFx> = {
+  clear:   { label: 'Clear',    severity: 'calm',     speed: 1.0,  fuel: 1.0,  accident: 1.0, spoilage: 0 },
+  wind:    { label: 'Windy',    severity: 'calm',     speed: 0.97, fuel: 1.06, accident: 1.1, spoilage: 0 },
+  rain:    { label: 'Rain',     severity: 'moderate', speed: 0.9,  fuel: 1.05, accident: 1.4, spoilage: 0.02 },
+  fog:     { label: 'Fog',      severity: 'moderate', speed: 0.85, fuel: 1.02, accident: 1.6, spoilage: 0 },
+  heat:    { label: 'Heatwave', severity: 'moderate', speed: 0.95, fuel: 1.1,  accident: 1.1, spoilage: 0.1 },
+  snow:    { label: 'Snow',     severity: 'severe',   speed: 0.75, fuel: 1.15, accident: 1.9, spoilage: 0.03 },
+  storm:   { label: 'Storm',    severity: 'severe',   speed: 0.7,  fuel: 1.18, accident: 2.2, spoilage: 0.06 },
+  flood:   { label: 'Flood',    severity: 'extreme',  speed: 0.6,  fuel: 1.2,  accident: 2.4, spoilage: 0.08 },
+  cyclone: { label: 'Cyclone',  severity: 'extreme',  speed: 0.5,  fuel: 1.28, accident: 3.0, spoilage: 0.12 },
+}
+
+/** Short human advisory of how a weather state affects a trip. */
+export function weatherAdvisory(w: string): string {
+  const fx = WEATHER_FX[w]
+  if (!fx || fx.severity === 'calm') return ''
+  const parts: string[] = []
+  if (fx.speed < 1) parts.push(`speed −${Math.round((1 - fx.speed) * 100)}%`)
+  if (fx.fuel > 1) parts.push(`fuel +${Math.round((fx.fuel - 1) * 100)}%`)
+  if (fx.accident > 1) parts.push(`risk ×${fx.accident.toFixed(1)}`)
+  if (fx.spoilage > 0) parts.push(`spoilage ${Math.round(fx.spoilage * 100)}%`)
+  return parts.join(' · ')
 }
 
 export const CATEGORY_COLOR: Record<string, string> = {

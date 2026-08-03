@@ -21,10 +21,24 @@ use RuntimeException;
  */
 class ShipmentService
 {
-    private const WEATHER_FACTOR = [
-        'clear' => 1.00, 'heat' => 0.95, 'rain' => 0.90,
-        'fog' => 0.85, 'snow' => 0.75, 'storm' => 0.70, 'flood' => 0.60,
-    ];
+    /** Effect multipliers for a weather state (config-driven, Weather v2). */
+    private function weatherCfg(?string $w): array
+    {
+        return config('transoria.weather.'.$w)
+            ?? config('transoria.weather.clear');
+    }
+
+    /**
+     * The weather a trip actually runs through: the harsher of the origin and
+     * destination (whichever slows you more), so a storm at either end bites.
+     */
+    private function laneWeather(?string $origin, ?string $destination): string
+    {
+        $o = $origin ?: 'clear';
+        $d = $destination ?: 'clear';
+
+        return $this->weatherCfg($o)['speed'] <= $this->weatherCfg($d)['speed'] ? $o : $d;
+    }
 
     public function __construct(
         private readonly LedgerService $ledger,
@@ -110,9 +124,11 @@ class ShipmentService
             // Effective route distance (route AI can shorten it).
             $distance = $contract->distance_km * (1 + ($bonuses['distance_factor'] ?? 0));
 
-            // Effective speed after driver, weather, traffic, research.
-            $weather = $contract->destination->weather ?? 'clear';
-            $weatherFactor = self::WEATHER_FACTOR[$weather] ?? 1.0;
+            // Effective speed after driver, weather, traffic, research. Weather
+            // is the harsher of the two lane ends (Weather v2).
+            $weather = $this->laneWeather($contract->origin->weather ?? 'clear', $contract->destination->weather ?? 'clear');
+            $wc = $this->weatherCfg($weather);
+            $weatherFactor = $wc['speed'];
             $trafficFactor = 1 - ($contract->destination->traffic / 100) * 0.4;
             // Road quality along the lane (avg of both ends): rough roads slow
             // you down. ~0.82 (poor) → 1.0 (excellent).
@@ -137,9 +153,13 @@ class ShipmentService
             // A fuel-savvy driver sips less (eco_skill up to -20%).
             $ecoDriver = 1 - ($driver->eco_skill ?? 0) / 500;
             $economy = $model->fuel_economy * (1 + ($bonuses['fuel_economy'] ?? 0)) * $engineFuel * $ecoDriver;
-            $fuelBudget = max(0, $distance * $economy);
+            // Tank sufficiency is judged on the BASE range (so dispatch is
+            // predictable), but bad weather makes the trip actually BURN more —
+            // you arrive lower and the refuel-on-arrival costs more.
+            $baseFuel = max(0, $distance * $economy);
+            $fuelBudget = max(0, $baseFuel * $wc['fuel']);
 
-            if ($fuelBudget > 0 && $vehicle->fuel + 0.001 < $fuelBudget) {
+            if ($baseFuel > 0 && $vehicle->fuel + 0.001 < $baseFuel) {
                 throw new RuntimeException(
                     'Not enough fuel in the tank for this trip — refuel '.
                     ($vehicle->nickname ?: $model->name).' first.'
@@ -174,7 +194,8 @@ class ShipmentService
                 'weather_snapshot' => $weather,
                 'event_log' => [[
                     'at' => $departedAt->toIso8601String(),
-                    'text' => "Departed {$contract->origin->name} for {$contract->destination->name}.",
+                    'text' => "Departed {$contract->origin->name} for {$contract->destination->name}."
+                        .($weather !== 'clear' ? " {$wc['icon']} {$wc['label']} en route." : ''),
                 ]],
                 'departed_at' => $departedAt,
                 'eta_at' => $etaAt,
@@ -221,8 +242,10 @@ class ShipmentService
             $cfg = config('transoria.shipment');
             $reliability = $vehicle->model->reliability;
 
-            $weatherFactor = self::WEATHER_FACTOR[$shipment->weather_snapshot] ?? 1.0;
-            $weatherRisk = $weatherFactor < 0.85 ? 1.6 : 1.0;
+            // Weather v2: the snapshotted lane weather drives incident odds,
+            // extra wear and cargo spoilage — all from the config table.
+            $wc = $this->weatherCfg($shipment->weather_snapshot);
+            $weatherRisk = (float) $wc['accident'];
 
             // Neglected oil/battery raise breakdown odds; lapsed papers raise
             // accident odds (and invite fines on top of an accident).
@@ -232,7 +255,7 @@ class ShipmentService
             $breakdownChance = $cfg['breakdown_base_chance'] * (2 - $reliability)
                 * (1 + ($bonuses['breakdown_chance'] ?? 0))
                 * (1 + ($oilLow ? 0.6 : 0) + ($batteryLow ? 0.4 : 0));
-            $wetWeather = $weatherRisk > 1;
+            $wetWeather = $weatherRisk > 1.2;
             $accidentChance = $cfg['accident_base_chance']
                 * (1 + ($driver->fatigue / 100))
                 * $weatherRisk
@@ -278,6 +301,19 @@ class ShipmentService
                 $gross = $late
                     ? (int) round($contract->payout * $cfg['late_payout_pct'])
                     : $contract->payout;
+
+                // Weather v2: perishable cargo can spoil in harsh weather. A
+                // reefer-hauled commodity resists most of it; other perishables
+                // take the full hit. Reduces the payout, logged for the player.
+                $spoilage = 0.0;
+                if ($commodity->is_perishable && ($wc['spoilage'] ?? 0) > 0) {
+                    $spoilage = $wc['spoilage'] * ($commodity->requires_reefer ? 0.3 : 1.0);
+                    if ($spoilage > 0) {
+                        $gross = (int) round($gross * (1 - $spoilage));
+                        $log[] = ['at' => $arrivedAt->toIso8601String(),
+                            'text' => "{$wc['icon']} {$wc['label']} spoiled ".round($spoilage * 100)."% of the {$commodity->name}."];
+                    }
+                }
 
                 $taxAmount = (int) round($gross * $tax);
                 $net = $gross - $taxAmount;
@@ -326,11 +362,12 @@ class ShipmentService
 
             // --- Vehicle wear --------------------------------------------------
             $km = $shipment->distance_km;
+            $weatherWear = (float) ($wc['wear'] ?? 1.0); // storms/snow chew up the truck faster
             $vehicle->odometer += (int) round($km);
-            $vehicle->condition = max(0, $vehicle->condition - $km / 1000 * $cfg['condition_loss_per_1000km'] - ($failed ? 8 : 0));
+            $vehicle->condition = max(0, $vehicle->condition - $km / 1000 * $cfg['condition_loss_per_1000km'] * $weatherWear - ($failed ? 8 : 0));
             // Tyre upgrades cut wear by 15% per level.
             $tireResist = max(0.4, 1 - 0.15 * $vehicle->tires_level);
-            $vehicle->tire_wear = min(100, $vehicle->tire_wear + $km / 1000 * $cfg['tire_loss_per_1000km'] * $tireResist);
+            $vehicle->tire_wear = min(100, $vehicle->tire_wear + $km / 1000 * $cfg['tire_loss_per_1000km'] * $tireResist * $weatherWear);
             // Engine oil and battery drain with distance; service to restore.
             $garage = config('transoria.garage');
             $vehicle->oil_level = max(0, $vehicle->oil_level - $km / 1000 * $garage['oil_loss_per_1000km']);
